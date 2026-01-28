@@ -10,7 +10,19 @@ async function helpCommand(sock, chatId, message) {
 привет @${senderShort} как дела?
 
 Доступные команды:
-.hidetag
+
+> .hidetag
+> .antilink
+> .пинг
+> .повысить
+> .понизить
+> .разработчик
+> .стикер
+> .ttt
+> .инфогруппа
+> .кик
+> +чат
+> -чат
 и все больше пока ничо нет
 
 `;

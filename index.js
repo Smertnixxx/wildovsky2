@@ -133,6 +133,19 @@ async function startXeonBotInc() {
                 return;
             }
 
+            // Forward reaction messages to command-specific reaction handlers (e.g., tictactoe)
+            if (mek.message?.reactionMessage) {
+                try {
+                    const ttt = require('./commands/tictactoe');
+                    const reactionMsg = Object.assign({}, mek, { isGroup: (mek.key.remoteJid || '').endsWith('@g.us'), mtype: 'reactionMessage' });
+                    if (typeof ttt.handleReaction === 'function') {
+                        await ttt.handleReaction(reactionMsg, { conn: XeonBotInc });
+                    }
+                } catch (e) {
+                    console.error('Error forwarding reaction to tictactoe handler:', e);
+                }
+            }
+
             if (!XeonBotInc.public && !mek.key.fromMe && chatUpdate.type === 'notify') {
                 const isGroup = mek.key?.remoteJid?.endsWith('@g.us')
                 if (!isGroup) return // Блокировка личных сообщений в приватном режиме

@@ -15,12 +15,7 @@ async function downloadMediaMessage(message, mediaType) {
 }
 
 async function hideTagCommand(sock, chatId, senderId, messageText, replyMessage, message) {
-    const { isSenderAdmin, isBotAdmin } = await isAdmin(sock, chatId, senderId);
-
-    if (!isBotAdmin) {
-        await sock.sendMessage(chatId, { text: 'Дайте боту админку для того чтобы использовать эту команду.' }, { quoted: message });
-        return;
-    }
+    const { isSenderAdmin } = await isAdmin(sock, chatId, senderId);
 
     if (!isSenderAdmin) {
         await sock.sendMessage(chatId, { text: 'Только админы могут юзать эту команду.' }, { quoted: message });

@@ -1,116 +1,191 @@
 const TicTacToe = require('../lib/tictactoe');
 
-// Store games globally
-const games = {};
+let pendingGames = {};
+const GAME_TIMEOUT = 5 * 60 * 1000; // 5 минут
 
-async function tictactoeCommand(sock, chatId, senderId, text) {
-    try {
-        // Check if player is already in a game
-        if (Object.values(games).find(room => 
-            room.id.startsWith('tictactoe') && 
-            [room.game.playerX, room.game.playerO].includes(senderId)
-        )) {
-            await sock.sendMessage(chatId, { 
-                text: '❌ You are still in a game. Type *surrender* to quit.' 
-            });
-            return;
-        }
+const symbols = {
+    X: '❎',
+    O: '⭕',
+    1: '1️⃣',
+    2: '2️⃣',
+    3: '3️⃣',
+    4: '4️⃣',
+    5: '5️⃣',
+    6: '6️⃣',
+    7: '7️⃣',
+    8: '8️⃣',
+    9: '9️⃣',
+};
 
-        // Look for existing room
-        let room = Object.values(games).find(room => 
-            room.state === 'WAITING' && 
-            (text ? room.name === text : true)
-        );
+const parsemention = (text) => {
+    return [...text.matchAll(/@([0-9]{5,16}|0)/g)].map(v => v[1] + '@s.whatsapp.net');
+};
 
-        if (room) {
-            // Join existing room
-            room.o = chatId;
-            room.game.playerO = senderId;
-            room.state = 'PLAYING';
+const generateGameText = (room) => {
+    const arr = room.game.render().map(v => symbols[v] || v);
 
-            const arr = room.game.render().map(v => ({
-                'X': '❎',
-                'O': '⭕',
-                '1': '1️⃣',
-                '2': '2️⃣',
-                '3': '3️⃣',
-                '4': '4️⃣',
-                '5': '5️⃣',
-                '6': '6️⃣',
-                '7': '7️⃣',
-                '8': '8️⃣',
-                '9': '9️⃣',
-            }[v]));
-
-            const str = `
-🎮 *TicTacToe Game Started!*
-
-Waiting for @${room.game.currentTurn.split('@')[0]} to play...
+    return `
+Игра началась! Ход: @${room.game.currentTurn.split('@')[0]}
 
 ${arr.slice(0, 3).join('')}
 ${arr.slice(3, 6).join('')}
 ${arr.slice(6).join('')}
 
-▢ *Room ID:* ${room.id}
-▢ *Rules:*
-• Make 3 rows of symbols vertically, horizontally or diagonally to win
-• Type a number (1-9) to place your symbol
-• Type *surrender* to give up
-`;
+*Правила игры в Крестики-нолики*
+> Составьте 3 символа в ряд (по вертикали, горизонтали или диагонали), чтобы победить.
+`.trim();
+};
 
-            // Send message only once to the group
-            await sock.sendMessage(chatId, { 
-                text: str,
-                mentions: [room.game.currentTurn, room.game.playerX, room.game.playerO]
-            });
+let handler = async (m, { conn, usedPrefix, command, text }) => {
+    conn.game = conn.game || {};
 
-        } else {
-            // Create new room
-            room = {
-                id: 'tictactoe-' + (+new Date),
-                x: chatId,
-                o: '',
-                game: new TicTacToe(senderId, 'o'),
-                state: 'WAITING'
-            };
+    const now = Date.now();
 
-            if (text) room.name = text;
-
-            await sock.sendMessage(chatId, { 
-                text: `⏳ *Waiting for opponent*\nType *.ttt ${text || ''}* to join!`
-            });
-
-            games[room.id] = room;
-        }
-
-    } catch (error) {
-        console.error('Error in tictactoe command:', error);
-        await sock.sendMessage(chatId, { 
-            text: '❌ Error starting game. Please try again.' 
-        });
+    if (pendingGames[m.chat]) {
+        return m.reply(`❗ В этом чате уже ищут соперника для игры в Крестики-нолики. Подождите или присоединитесь к текущему вызову.`);
     }
+
+    if (Object.values(conn.game).find(
+        room => room?.id?.startsWith('tictactoe') && room.state === 'PLAYING' && [room.x, room.o].includes(m.chat)
+    )) {
+        return m.reply(`❗ В этом чате уже запущена игра. Дождитесь её завершения.`);
+    }
+
+    if (Object.values(conn.game).find(
+        room => room?.id?.startsWith('tictactoe') && [room.game.playerX, room.game.playerO].includes(m.sender)
+    )) {
+        return m.reply(`❗ Вы уже участвуете в игре. Завершите её перед началом новой.`);
+    }
+
+    if (!text) text = m.sender.split('@')[0];
+
+    let room = Object.values(conn.game).find(
+        room => room?.state === 'WAITING' && room.name === text
+    );
+
+    if (room) {
+        if (!room.o) {
+            room.o = m.chat;
+            room.game.playerO = m.sender;
+            room.state = 'PLAYING';
+            room.lastMoveAt = now;
+
+            const gameText = generateGameText(room);
+
+            await conn.sendMessage(room.x, { text: gameText, mentions: parsemention(gameText) });
+            await conn.sendMessage(room.o, { text: gameText, mentions: parsemention(gameText) });
+        } else {
+            return m.reply(`❗ В этой комнате уже есть два игрока!`);
+        }
+    } else {
+        room = {
+            id: 'tictactoe-' + (+new Date),
+            x: m.chat,
+            o: '',
+            game: new TicTacToe(m.sender, 'o'),
+            state: 'WAITING',
+            name: text,
+            createdAt: now,
+            lastMoveAt: now,
+        };
+
+        pendingGames[m.chat] = room;
+
+        const waitingMessage = await conn.sendMessage(m.chat, {
+            text: `Ищем партнера для игры в Крестики-нолики!\n\nЧтобы присоединиться, поставьте реакцию "👍" на это сообщение.`,
+        });
+
+        pendingGames[waitingMessage.key.id] = room;
+
+        setTimeout(() => {
+            if (pendingGames[m.chat] === room) {
+                delete pendingGames[m.chat];
+                conn.sendMessage(m.chat, {
+                    text: `⏳ Партнёр для игры не найден. Попробуйте позже.`,
+                });
+            }
+        }, GAME_TIMEOUT);
+
+        conn.game[room.id] = room;
+    }
+};
+
+const thumbsUpReactions = ['👍', '👍🏻', '👍🏼', '👍🏽', '👍🏾', '👍🏿'];
+
+let reactionHandler = async function (m, { conn }) {
+    if (!m.isGroup || m.mtype !== 'reactionMessage') return;
+
+    const messageID = m.message.reactionMessage?.key?.id;
+    const reactionText = m.message.reactionMessage?.text || '';
+
+    if (!thumbsUpReactions.includes(reactionText)) return;
+
+    const room = pendingGames[messageID];
+    if (!room || room.state !== 'WAITING') return;
+
+    const chatId = m.key?.remoteJid || m.chat;
+    const senderId = m.key?.participant || m.key?.remoteJid || m.sender;
+
+    if (room.game.playerX === senderId) {
+        if (m.reply) {
+            return m.reply('❗ Вы не можете играть против самого себя!');
+        }
+        await conn.sendMessage(chatId, { text: 'ты не можешь против самого себя играть дурачок' });
+        return;
+    }
+
+    room.o = chatId;
+    room.game.playerO = senderId;
+    room.state = 'PLAYING';
+    room.lastMoveAt = Date.now();
+
+    const gameText = generateGameText(room);
+
+    await conn.sendMessage(room.o, { text: gameText, mentions: parsemention(gameText) });
+    if (room.x !== room.o) {
+        await conn.sendMessage(room.x, { text: gameText, mentions: parsemention(gameText) });
+    }
+    delete pendingGames[chatId];
+    delete pendingGames[messageID];
+};
+
+handler.before = reactionHandler;
+
+handler.command = ['тиктак', 'ttt', 'кн'];
+handler.group = true;
+handler.exp = 0;
+
+// Compatibility wrapper for main.js which expects CommonJS exports:
+async function tictactoeCommand(sock, chatId, senderId, text) {
+    const m = {
+        chat: chatId,
+        sender: senderId,
+        isGroup: (chatId || '').endsWith('@g.us'),
+        reply: async (txt) => { try { await sock.sendMessage(chatId, { text: txt }); } catch (e) {} },
+        key: { remoteJid: chatId },
+        message: {}
+    };
+    await handler(m, { conn: sock, usedPrefix: '.', command: 'ttt', text });
 }
 
 async function handleTicTacToeMove(sock, chatId, senderId, text) {
     try {
-        // Find player's game
-        const room = Object.values(games).find(room => 
-            room.id.startsWith('tictactoe') && 
-            [room.game.playerX, room.game.playerO].includes(senderId) && 
+        const conn = sock;
+        conn.game = conn.game || {};
+
+        const room = Object.values(conn.game).find(room =>
+            room?.id?.startsWith('tictactoe') &&
+            [room.game.playerX, room.game.playerO].includes(senderId) &&
             room.state === 'PLAYING'
         );
 
         if (!room) return;
 
-        const isSurrender = /^(surrender|give up)$/i.test(text);
-        
+        const isSurrender = /^(сдаться|сдаюсь|surrender|give up)$/i.test(text);
         if (!isSurrender && !/^[1-9]$/.test(text)) return;
 
-        // Allow surrender at any time, not just during player's turn
         if (senderId !== room.game.currentTurn && !isSurrender) {
-            await sock.sendMessage(chatId, { 
-                text: '❌ Not your turn!' 
-            });
+            await conn.sendMessage(chatId, { text: 'это не твой ход' });
             return;
         }
 
@@ -120,55 +195,36 @@ async function handleTicTacToeMove(sock, chatId, senderId, text) {
         );
 
         if (!ok) {
-            await sock.sendMessage(chatId, { 
-                text: '❌ Invalid move! That position is already taken.' 
-            });
+            await conn.sendMessage(chatId, { text: 'ЗАНЯТО НАУЙ' });
             return;
         }
 
         let winner = room.game.winner;
         let isTie = room.game.turns === 9;
 
-        const arr = room.game.render().map(v => ({
-            'X': '❎',
-            'O': '⭕',
-            '1': '1️⃣',
-            '2': '2️⃣',
-            '3': '3️⃣',
-            '4': '4️⃣',
-            '5': '5️⃣',
-            '6': '6️⃣',
-            '7': '7️⃣',
-            '8': '8️⃣',
-            '9': '9️⃣',
-        }[v]));
+        const arr = room.game.render().map(v => symbols[v] || v);
 
         if (isSurrender) {
-            // Set the winner to the opponent of the surrendering player
             winner = senderId === room.game.playerX ? room.game.playerO : room.game.playerX;
-            
-            // Send a surrender message
-            await sock.sendMessage(chatId, { 
-                text: `🏳️ @${senderId.split('@')[0]} has surrendered! @${winner.split('@')[0]} wins the game!`,
+            await conn.sendMessage(chatId, {
+                text: `@${senderId.split('@')[0]} сдался! Победил @${winner.split('@')[0]}!`,
                 mentions: [senderId, winner]
             });
-            
-            // Delete the game immediately after surrender
-            delete games[room.id];
+            delete conn.game[room.id];
             return;
         }
 
         let gameStatus;
         if (winner) {
-            gameStatus = `🎉 @${winner.split('@')[0]} wins the game!`;
+            gameStatus = `@${winner.split('@')[0]} выигрывает!`;
         } else if (isTie) {
-            gameStatus = `🤝 Game ended in a draw!`;
+            gameStatus = `Ничья!`;
         } else {
-            gameStatus = `🎲 Turn: @${room.game.currentTurn.split('@')[0]} (${senderId === room.game.playerX ? '❎' : '⭕'})`;
+            gameStatus = `🎲 Ход: @${room.game.currentTurn.split('@')[0]}`;
         }
 
         const str = `
-🎮 *TicTacToe Game*
+*Крестики-нолики*
 
 ${gameStatus}
 
@@ -176,34 +232,26 @@ ${arr.slice(0, 3).join('')}
 ${arr.slice(3, 6).join('')}
 ${arr.slice(6).join('')}
 
-▢ Player ❎: @${room.game.playerX.split('@')[0]}
-▢ Player ⭕: @${room.game.playerO.split('@')[0]}
+1 Игрок ❎: @${room.game.playerX.split('@')[0]}
+2 Игрок ⭕: @${room.game.playerO.split('@')[0]}
 
-${!winner && !isTie ? '• Type a number (1-9) to make your move\n• Type *surrender* to give up' : ''}
-`;
+${!winner && !isTie ? '• Введите номер (1-9), чтобы сделать ход\n• Введите *сдаться* чтобы сдаться' : ''}
+`.trim();
 
         const mentions = [
-            room.game.playerX, 
+            room.game.playerX,
             room.game.playerO,
             ...(winner ? [winner] : [room.game.currentTurn])
         ];
 
-        await sock.sendMessage(room.x, { 
-            text: str,
-            mentions: mentions
-        });
-
+        await conn.sendMessage(room.x, { text: str, mentions });
         if (room.x !== room.o) {
-            await sock.sendMessage(room.o, { 
-                text: str,
-                mentions: mentions
-            });
+            await conn.sendMessage(room.o, { text: str, mentions });
         }
 
         if (winner || isTie) {
-            delete games[room.id];
+            delete conn.game[room.id];
         }
-
     } catch (error) {
         console.error('Error in tictactoe move:', error);
     }
@@ -211,5 +259,6 @@ ${!winner && !isTie ? '• Type a number (1-9) to make your move\n• Type *surr
 
 module.exports = {
     tictactoeCommand,
-    handleTicTacToeMove
+    handleTicTacToeMove,
+    handleReaction: reactionHandler
 };

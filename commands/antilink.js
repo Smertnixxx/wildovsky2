@@ -53,7 +53,7 @@ async function handleAntilinkCommand(sock, chatId, userMessage, senderId, isSend
                 }
                 const setResult = await setAntilink(chatId, 'on', setAction);
                 await sock.sendMessage(chatId, { 
-                    text: setResult ? `*_Действие антиссылки установлено на ${setAction}_*` : '*_Не удалось установить действие антиссылки_*' 
+                    text: setResult ? `Действие антиссылки установлено на ${setAction}` : 'Не удалось установить действие антиссылки' 
                 }, { quoted: message });
                 break;
 
@@ -61,16 +61,16 @@ async function handleAntilinkCommand(sock, chatId, userMessage, senderId, isSend
                 const status = await getAntilink(chatId, 'on');
                 const actionConfig = await getAntilink(chatId, 'on');
                 await sock.sendMessage(chatId, { 
-                    text: `*_Конфигурация антиссылки:_*\nСтатус: ${status ? 'ВКЛ' : 'ВЫКЛ'}\nДействие: ${actionConfig ? actionConfig.action : 'Не установлено'}` 
+                    text: `Конфиг антиссылки:\nСтатус: ${status ? 'вкл' : 'выкл'}\nДействие: ${actionConfig ? actionConfig.action : 'Не установлено'}` 
                 }, { quoted: message });
                 break;
 
             default:
-                await sock.sendMessage(chatId, { text: `*_Используйте ${prefix}antilink для справки._*` });
+                await sock.sendMessage(chatId, { text: `Используйте ${prefix}antilink для справки.` });
         }
     } catch (error) {
         console.error('Ошибка в команде antilink:', error);
-        await sock.sendMessage(chatId, { text: '*_Ошибка обработки команды антиссылки_*' });
+        await sock.sendMessage(chatId, { text: 'Ошибка обработки команды антиссылки' });
     }
 }
 

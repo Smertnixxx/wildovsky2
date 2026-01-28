@@ -181,39 +181,7 @@ function shortJid(jid = '') {
     return jid.split('@')[0];
 }
 
-async function getDisplayName(sock, jid) {
-    if (!jid) return '';
-    try {
-        if (typeof sock.getName === 'function') {
-            const name = await sock.getName(jid);
-            if (name) {
-                // if name is not just digits, return it
-                const stripped = String(name).replace(/\D/g, '');
-                if (!/^\d+$/.test(stripped) || stripped.length < String(name).length) return name;
-                // otherwise continue to try other sources
-            }
-        }
-    } catch (e) { }
-    // Try group metadata for groups
-    try {
-        if ((jid || '').endsWith('@g.us') && typeof sock.groupMetadata === 'function') {
-            const meta = await sock.groupMetadata(jid).catch(() => null);
-            if (meta && meta.subject) return meta.subject;
-        }
-    } catch (e) {}
-
-    // Try contacts map on socket
-    try {
-        if (sock.contacts && sock.contacts[jid]) {
-            const c = sock.contacts[jid];
-            if (c.notify) return c.notify;
-            if (c.name) return c.name;
-            if (c.vname) return c.vname;
-        }
-    } catch (e) {}
-
-    return shortJid(jid);
-}
+const getDisplayName = require('./lib/getDisplayName');
 
 function logDetailed({ isCommand = false, text = '', sender = '', senderName = '', chat = '', chatName = '', chatIsGroup = false, botName = 'Bot', isBanned = false, isBotSender = false }) {
     const time = getEkaterinburgTime();
@@ -411,7 +379,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
         }
 
         // First check if it's a game move
-        if (/^[1-9]$/.test(userMessage) || userMessage.toLowerCase() === 'surrender') {
+        if (/^[1-9]$/.test(userMessage) || userMessage.toLowerCase() === 'сдаться') {
             await handleTicTacToeMove(sock, chatId, senderId, userMessage);
             return;
         }
@@ -537,10 +505,12 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             }
             case userMessage.startsWith('.kick'):
+            case userMessage.startsWith('.кик'):
                 const mentionedJidListKick = message.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
                 await kickCommand(sock, chatId, senderId, mentionedJidListKick, message);
                 break;
             case userMessage.startsWith('.mute'):
+                            case userMessage.startsWith('+чат'):
                 {
                     const parts = userMessage.trim().split(/\s+/);
                     const muteArg = parts[1];
@@ -553,6 +523,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 }
                 break;
             case userMessage === '.unmute':
+                            case userMessage === '-чат':
                 await unmuteCommand(sock, chatId, senderId);
                 break;
             case userMessage.startsWith('.ban'):
@@ -577,7 +548,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 await helpCommand(sock, chatId, message, global.channelLink);
                 commandExecuted = true;
                 break;
-            case userMessage === '.sticker' || userMessage === '.s':
+            case userMessage === '.sticker' || userMessage === '.стикер':
                 await stickerCommand(sock, chatId, message);
                 commandExecuted = true;
                 break;
@@ -668,7 +639,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 }
                 commandExecuted = true;
                 break;
-            case userMessage === '.owner':
+            case userMessage === '.owner'|| userMessage.startsWith('.разработчик'):
                 await ownerCommand(sock, chatId);
                 break;
             case userMessage === '.tagall':
@@ -679,6 +650,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             case userMessage.startsWith('.hidetag'):
             case userMessage.startsWith('.все'):
+            case userMessage.startsWith('.вызов'):
                 {
                     // support both .hidetag and .все (alias)
                     const sliceLen = userMessage.startsWith('.hidetag') ? 8 : 4;
@@ -761,7 +733,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                     tictactoeMove(sock, chatId, senderId, position);
                 }
                 break;
-            case userMessage === '.topmembers':
+            case userMessage === '.topmembers' || userMessage.startsWith('.сообщения'):
                 topMembers(sock, chatId, isGroup);
                 break;
             case userMessage.startsWith('.hangman'):
@@ -820,15 +792,15 @@ async function handleMessages(sock, messageUpdate, printLog) {
             case userMessage === '.clear':
                 if (isGroup) await clearCommand(sock, chatId);
                 break;
-            case userMessage.startsWith('.promote'):
+            case userMessage.startsWith('.promote') || userMessage.startsWith('.повысить'):
                 const mentionedJidListPromote = message.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
                 await promoteCommand(sock, chatId, mentionedJidListPromote, message);
                 break;
-            case userMessage.startsWith('.demote'):
+            case userMessage.startsWith('.promote') || userMessage.startsWith('.понизить'):
                 const mentionedJidListDemote = message.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
                 await demoteCommand(sock, chatId, mentionedJidListDemote, message);
                 break;
-            case userMessage === '.ping':
+            case userMessage === '.ping'|| userMessage.startsWith('.пинг'):
                 await pingCommand(sock, chatId, message);
                 break;
             case userMessage.startsWith('.mention '):
@@ -946,7 +918,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 }
                 await shipCommand(sock, chatId, message);
                 break;
-            case userMessage === '.groupinfo' || userMessage === '.infogp' || userMessage === '.infogrupo':
+            case userMessage === '.groupinfo' || userMessage === '.инфогруппа' || userMessage === '.infogrupo':
                 if (!isGroup) {
                     await sock.sendMessage(chatId, { text: 'This command can only be used in groups!', ...channelInfo }, { quoted: message });
                     return;
@@ -1048,9 +1020,9 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 const antideleteMatch = userMessage.slice(11).trim();
                 await handleAntideleteCommand(sock, chatId, message, antideleteMatch);
                 break;
-            case userMessage === '.surrender':
-                // Handle surrender command for tictactoe game
-                await handleTicTacToeMove(sock, chatId, senderId, 'surrender');
+            case userMessage === '.сдаться':
+                // Handle сдаться command for tictactoe game
+                await handleTicTacToeMove(sock, chatId, senderId, 'сдаться');
                 break;
             case userMessage === '.cleartmp':
                 await clearTmpCommand(sock, chatId, message);

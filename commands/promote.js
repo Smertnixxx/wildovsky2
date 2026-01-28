@@ -1,4 +1,4 @@
-const { isAdmin } = require('../lib/isAdmin');
+const isAdmin = require('../lib/isAdmin');
 
 // Function to handle manual promotions via command
 async function promoteCommand(sock, chatId, mentionedJids, message) {
@@ -24,14 +24,14 @@ async function promoteCommand(sock, chatId, mentionedJids, message) {
 
             if (!adminStatus.isSenderAdmin) {
                 await sock.sendMessage(chatId, { 
-                    text: '❌ Error: Only group admins can use the promote command.'
+                    text: 'Только в группах можно использовать эту команду'
                 });
                 return;
             }
         } catch (adminError) {
             console.error('Error checking admin status:', adminError);
             await sock.sendMessage(chatId, { 
-                text: '❌ Error: Please make sure the bot is an admin of this group.'
+                text: 'Сделайте бота админом чтобы он смог выполнить эту команду'
             });
             return;
         }
@@ -50,7 +50,7 @@ async function promoteCommand(sock, chatId, mentionedJids, message) {
         // If no user found through either method
         if (userToPromote.length === 0) {
             await sock.sendMessage(chatId, { 
-                text: '❌ Error: Please mention the user or reply to their message to promote!'
+                text: 'Ответьте на сообщение участника чата чтобы повысить его'
             });
             return;
         }

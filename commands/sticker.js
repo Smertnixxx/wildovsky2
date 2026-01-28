@@ -129,12 +129,20 @@ async function stickerCommand(sock, chatId, message) {
         // Add metadata using webpmux
         const img = new webp.Image();
         await img.load(webpBuffer);
+    const senderId = (message && message.key && (message.key.participant || message.key.remoteJid)) || '';
+    // resolve friendly display name
+    const getDisplayName = require('../lib/getDisplayName');
+    let senderName = 'user';
+    try {
+        const resolved = await getDisplayName(sock, senderId);
+        if (resolved) senderName = resolved;
+    } catch (e) {}
 
         // Create metadata
         const json = {
             'sticker-pack-id': crypto.randomBytes(32).toString('hex'),
-            'sticker-pack-name': settings.packname || 'KnightBot',
-            'emojis': ['🤖']
+            'sticker-pack-name': `это твой стикер солнышко <3 ${senderName}`,
+            'emojis': ['🦆']
         };
 
         // Create exif buffer
