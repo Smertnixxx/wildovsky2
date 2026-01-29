@@ -21,7 +21,11 @@ function formatTime(seconds) {
 async function pingCommand(sock, chatId, message) {
     try {
         const start = Date.now();
-        await sock.sendMessage(chatId, { text: 'Понг!' }, { quoted: message });
+
+
+        const sent = await sock.sendMessage(chatId, { text: 'Понг!' }, { quoted: message });
+        const statusKey = sent.key;
+
         const end = Date.now();
         const ping = Math.round((end - start) / 2);
 
@@ -32,9 +36,7 @@ async function pingCommand(sock, chatId, message) {
 пинг бота - ${ping} ms
 время его работы - ${uptimeFormatted}
 `.trim();
-
-        // Reply to the original message with the bot info
-        await sock.sendMessage(chatId, { text: botInfo},{ quoted: message });
+        await sock.sendMessage(chatId, { text: botInfo, edit: statusKey });
 
     } catch (error) {
         console.error('Error in ping command:', error);

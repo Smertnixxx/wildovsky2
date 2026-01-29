@@ -43,7 +43,6 @@ const { PHONENUMBER_MCC } = require('@whiskeysockets/baileys/lib/Utils/generics'
 const { rmSync, existsSync } = require('fs')
 const { join } = require('path')
 
-// Импорт облегченного хранилища
 const store = require('./lib/lightweight_store')
 
 // Инициализация хранилища

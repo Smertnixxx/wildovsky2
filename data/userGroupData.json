@@ -2,10 +2,6 @@
   "users": [],
   "groups": [],
   "antilink": {
-    "120363235289802662@g.us": {
-      "enabled": true,
-      "action": "delete"
-    },
     "120363356707555995@g.us": {
       "enabled": true,
       "action": "delete"
