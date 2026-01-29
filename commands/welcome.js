@@ -102,10 +102,8 @@ async function handleJoinEvent(sock, id, participants) {
                     
                     // Send welcome image with caption (custom or default message)
                     await sock.sendMessage(id, {
-                        image: imageBuffer,
                         caption: finalMessage,
                         mentions: [participantString],
-                        ...channelInfo
                     });
                     continue; // Skip to next participant
                 }
@@ -117,7 +115,6 @@ async function handleJoinEvent(sock, id, participants) {
             await sock.sendMessage(id, {
                 text: finalMessage,
                 mentions: [participantString],
-                ...channelInfo
             });
         } catch (error) {
             console.error('Error sending welcome message:', error);
@@ -133,13 +130,13 @@ async function handleJoinEvent(sock, id, participants) {
                     .replace(/{group}/g, groupName)
                     .replace(/{description}/g, groupDesc);
             } else {
-                fallbackMessage = `Welcome @${user} to ${groupName}! 🎉`;
+                fallbackMessage = `Добро пожаловать @${user} в группу ${groupName}!`;
             }
             
             await sock.sendMessage(id, {
                 text: fallbackMessage,
                 mentions: [participantString],
-                ...channelInfo
+                
             });
         }
     }

@@ -34,7 +34,7 @@ async function handleAntilinkCommand(sock, chatId, userMessage, senderId, isSend
 
             case 'off':
                 await removeAntilink(chatId, 'on');
-                await sock.sendMessage(chatId, { text: 'антиссылка включена' }, { quoted: message });
+                await sock.sendMessage(chatId, { text: 'антиссылка выключена' }, { quoted: message });
                 break;
 
             case 'set':
