@@ -1,145 +1,103 @@
-const { handleWelcome } = require('../lib/welcome');
-const { isWelcomeOn, getWelcome } = require('../lib/index');
-const { channelInfo } = require('../lib/messageConfig');
-const fetch = require('node-fetch');
+const { addWelcome, delWelcome, isWelcomeOn, getWelcome } = require('../lib/index');
 
-async function welcomeCommand(sock, chatId, message, match) {
-    // Check if it's a group
-    if (!chatId.endsWith('@g.us')) {
-        await sock.sendMessage(chatId, { text: 'This command can only be used in groups.' });
-        return;
+let welcomeQueue = {};
+
+async function handleWelcome(sock, chatId, message, match) {
+    if (!match) {
+        return sock.sendMessage(chatId, {
+            text: `📥 *Welcome Message Setup*\n\n✅ *.welcome on* — Enable welcome messages\n🛠️ *.welcome set Your custom message* — Set a custom welcome message\n🚫 *.welcome off* — Disable welcome messages\n\n*Available Variables:*\n• @user - Mentions the new member\n• @group - Shows group name\n• @desc - Shows group description\n• @count - Shows total members`,
+            quoted: message
+        });
     }
 
-    // Extract match from message
-    const text = message.message?.conversation || 
-                message.message?.extendedTextMessage?.text || '';
-    const matchText = text.split(' ').slice(1).join(' ');
+    const lowerMatch = match.toLowerCase();
 
-    await handleWelcome(sock, chatId, message, matchText);
+    if (lowerMatch === 'on') {
+        if (await isWelcomeOn(chatId)) {
+            return sock.sendMessage(chatId, { text: '⚠️ Welcome messages are *already enabled*.', quoted: message });
+        }
+        const defaultWelcome = `*✨ Добро пожаловать @user в группу @group*\n📃 Ознакомьтесь с правилами группы\n${String.fromCharCode(8206).repeat(850)}\n@desc`;
+        await addWelcome(chatId, true, defaultWelcome);
+        return sock.sendMessage(chatId, { text: '✅ Приветствие установлено\nТак же вы можете установить свой текст для приветствия новых участников группы\nДля этого введите *.welcome set (ваш текст)*', quoted: message });
+    }
+
+    if (lowerMatch === 'off') {
+        if (!(await isWelcomeOn(chatId))) {
+            return sock.sendMessage(chatId, { text: '⚠️ Welcome messages are *already disabled*.', quoted: message });
+        }
+        await delWelcome(chatId);
+        return sock.sendMessage(chatId, { text: '✅ Welcome messages *disabled* for this group.', quoted: message });
+    }
+
+    if (lowerMatch.startsWith('set ')) {
+        const customMessage = match.substring(4).trim();
+        if (!customMessage) {
+            return sock.sendMessage(chatId, { text: '⚠️ Введите текст приветствия\n📌 Пример: *.welcome set Добро пожаловать @user в @group!*', quoted: message });
+        }
+        await addWelcome(chatId, true, customMessage);
+        return sock.sendMessage(chatId, { text: '✅ Текст приветствия установлен', quoted: message });
+    }
+
+    return sock.sendMessage(chatId, {
+        text: `❌ Invalid command. Use:\n*.welcome on* - Enable\n*.welcome set [message]* - Set custom message\n*.welcome off* - Disable`,
+        quoted: message
+    });
 }
 
 async function handleJoinEvent(sock, id, participants) {
-    // Check if welcome is enabled for this group
     const isWelcomeEnabled = await isWelcomeOn(id);
     if (!isWelcomeEnabled) return;
 
-    // Get custom welcome message
-    const customMessage = await getWelcome(id);
-
-    // Get group metadata
     const groupMetadata = await sock.groupMetadata(id);
     const groupName = groupMetadata.subject;
-    const groupDesc = groupMetadata.desc || 'No description available';
+    const groupDesc = groupMetadata.desc || 'Описание группы отсутствует';
+    const totalMembers = groupMetadata.participants.length;
 
-    // Send welcome message for each new participant
-    for (const participant of participants) {
+    if (!welcomeQueue[id]) {
+        welcomeQueue[id] = { users: [], timeout: null };
+    }
+
+    for (let participant of participants) {
+        const participantString = typeof participant === 'string' ? participant : (participant.id || participant.toString());
+        welcomeQueue[id].users.push(participantString);
+    }
+
+    if (welcomeQueue[id].timeout) return;
+
+    welcomeQueue[id].timeout = setTimeout(async () => {
+        let users = welcomeQueue[id].users;
+        welcomeQueue[id].timeout = null;
+        welcomeQueue[id].users = [];
+
+        if (users.length === 0) return;
+
+        const customMessage = await getWelcome(id);
+        const defaultWelcome = `*✨ Добро пожаловать @user в группу @group*\n📃 Ознакомьтесь с правилами группы\n${String.fromCharCode(8206).repeat(850)}\n@desc`;
+        let welcomeText = customMessage || defaultWelcome;
+        
+        let userMentions = users.map(user => `@${user.split('@')[0]}`).join(' ');
+        
+        if (welcomeText.includes('@user')) {
+            welcomeText = welcomeText.replace(/@user/g, userMentions);
+        } else {
+            welcomeText = `${welcomeText} ${userMentions}`;
+        }
+
+        let finalMessage = welcomeText
+            .replace(/@group/g, groupName)
+            .replace(/@subject/g, groupName)
+            .replace(/@desc/g, groupDesc)
+            .replace(/@count/g, `${totalMembers}`);
+
         try {
-            // Handle case where participant might be an object or not a string
-            const participantString = typeof participant === 'string' ? participant : (participant.id || participant.toString());
-            const user = participantString.split('@')[0];
-            
-            // Get user's display name
-            let displayName = user; // Default to phone number
-            try {
-                const contact = await sock.getBusinessProfile(participantString);
-                if (contact && contact.name) {
-                    displayName = contact.name;
-                } else {
-                    // Try to get from group participants
-                    const groupParticipants = groupMetadata.participants;
-                    const userParticipant = groupParticipants.find(p => p.id === participantString);
-                    if (userParticipant && userParticipant.name) {
-                        displayName = userParticipant.name;
-                    }
-                }
-            } catch (nameError) {
-                console.log('Could not fetch display name, using phone number');
-            }
-            
-            // Process custom message with variables
-            let finalMessage;
-            if (customMessage) {
-                finalMessage = customMessage
-                    .replace(/{user}/g, `@${displayName}`)
-                    .replace(/{group}/g, groupName)
-                    .replace(/{description}/g, groupDesc);
-            } else {
-                // Default message if no custom message is set
-                const now = new Date();
-                const timeString = now.toLocaleString('en-US', {
-                    month: '2-digit',
-                    day: '2-digit', 
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                    hour12: true
-                });
-                
-                finalMessage = `╭╼━≪•𝙽𝙴𝚆 𝙼𝙴𝙼𝙱𝙴𝚁•≫━╾╮\n┃𝚆𝙴𝙻𝙲𝙾𝙼𝙴: @${displayName} 👋\n┃Member count: #${groupMetadata.participants.length}\n┃𝚃𝙸𝙼𝙴: ${timeString}⏰\n╰━━━━━━━━━━━━━━━╯\n\n*@${displayName}* Welcome to *${groupName}*! 🎉\n*Group 𝙳𝙴𝚂𝙲𝚁𝙸𝙿𝚃𝙸𝙾𝙽*\n${groupDesc}\n\n> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ Knight Bot*`;
-            }
-            
-            // Try to send with image first (always try images)
-            try {
-                // Get user profile picture
-                let profilePicUrl = `https://img.pyrocdn.com/dbKUgahg.png`; // Default avatar
-                try {
-                    const profilePic = await sock.profilePictureUrl(participantString, 'image');
-                    if (profilePic) {
-                        profilePicUrl = profilePic;
-                    }
-                } catch (profileError) {
-                    console.log('Could not fetch profile picture, using default');
-                }
-                
-                // Construct API URL for welcome image
-                const apiUrl = `https://api.some-random-api.com/welcome/img/2/gaming3?type=join&textcolor=green&username=${encodeURIComponent(displayName)}&guildName=${encodeURIComponent(groupName)}&memberCount=${groupMetadata.participants.length}&avatar=${encodeURIComponent(profilePicUrl)}`;
-                
-                // Fetch the welcome image
-                const response = await fetch(apiUrl);
-                if (response.ok) {
-                    const imageBuffer = await response.buffer();
-                    
-                    // Send welcome image with caption (custom or default message)
-                    await sock.sendMessage(id, {
-                        caption: finalMessage,
-                        mentions: [participantString],
-                    });
-                    continue; // Skip to next participant
-                }
-            } catch (imageError) {
-                console.log('Image generation failed, falling back to text');
-            }
-            
-            // Send text message (either custom message or fallback)
             await sock.sendMessage(id, {
                 text: finalMessage,
-                mentions: [participantString],
+                mentions: users
             });
         } catch (error) {
             console.error('Error sending welcome message:', error);
-            // Fallback to text message
-            const participantString = typeof participant === 'string' ? participant : (participant.id || participant.toString());
-            const user = participantString.split('@')[0];
-            
-            // Use custom message if available, otherwise use simple fallback
-            let fallbackMessage;
-            if (customMessage) {
-                fallbackMessage = customMessage
-                    .replace(/{user}/g, `@${user}`)
-                    .replace(/{group}/g, groupName)
-                    .replace(/{description}/g, groupDesc);
-            } else {
-                fallbackMessage = `Добро пожаловать @${user} в группу ${groupName}!`;
-            }
-            
-            await sock.sendMessage(id, {
-                text: fallbackMessage,
-                mentions: [participantString],
-                
-            });
         }
-    }
+    }, 5000);
 }
 
-module.exports = { welcomeCommand, handleJoinEvent };
+module.exports = { handleWelcome, handleJoinEvent };
