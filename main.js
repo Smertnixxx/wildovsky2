@@ -150,6 +150,10 @@ function shortJid(jid = '') {
     if (!jid) return '';
     return jid.split('@')[0];
 }
+function limit(str = '', max = 20) {
+    if (!str) return '';
+    return str.length > max ? str.slice(0, max) + '…' : str;
+}
 
 function logDetailed({ isCommand = false, text = '', sender = '', senderName = '', chat = '', chatName = '', chatIsGroup = false, botName = 'Bot', isBanned = false, isBotSender = false }) {
     const time = getEkaterinburgTime();
@@ -908,10 +912,6 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             }
 
-            function limit(str = '', max = 20) {
-    if (!str) return '';
-    return str.length > max ? str.slice(0, max) + '…' : str;
-}
 
 
             case userMessage.startsWith('.insult'): {
