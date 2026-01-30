@@ -2,6 +2,7 @@ const isAdmin = require('../lib/isAdmin');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 const fs = require('fs');
 const path = require('path');
+const isOwnerOrSudo = require('../lib/isOwner');
 
 async function downloadMediaMessage(message, mediaType) {
     const stream = await downloadContentFromMessage(message, mediaType);
@@ -16,10 +17,10 @@ async function downloadMediaMessage(message, mediaType) {
 
 async function tagCommand(sock, chatId, senderId, messageText, replyMessage, message) {
     const { isSenderAdmin, isBotAdmin } = await isAdmin(sock, chatId, senderId);
+    const ownerAllowed = await isOwnerOrSudo(senderId, sock, chatId);
 
-
-    if (!isSenderAdmin && !message.key.fromMe) {
-  await sock.sendMessage(chatId, { text: 'ты не админ' }, { quoted: message });
+    if (!ownerAllowed && !isSenderAdmin && !message.key.fromMe) {
+        await sock.sendMessage(chatId, { text: 'ты не админ' }, { quoted: message });
         return;
     }
 
