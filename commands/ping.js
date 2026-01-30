@@ -33,7 +33,7 @@ async function pingCommand(sock, chatId, message) {
         const uptimeFormatted = formatTime(uptimeInSeconds);
 
         const botInfo = `
-пинг ботаааааааффф - ${ping} ms
+пинг бота - ${ping} ms
 время его работы - ${uptimeFormatted}
 `.trim();
         await sock.sendMessage(chatId, { text: botInfo, edit: statusKey });
