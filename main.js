@@ -738,10 +738,10 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             }
 
-            case userMessage.startsWith('.вызов'): {
+            case userMessage.startsWith('.tag'): {
                 const messageText = rawText.slice(4).trim();
                 const replyMessage = message.message?.extendedTextMessage?.contextInfo?.quotedMessage || null;
-                const tagCommand = getCommand('вызов');
+                const tagCommand = getCommand('tag');
                 if (tagCommand) await tagCommand(sock, chatId, senderId, messageText, replyMessage, message);
                 break;
             }
