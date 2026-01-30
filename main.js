@@ -443,7 +443,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
         }
 
         // Admin and owner command lists
-        const adminCommands = ['.mute', '.unmute', '.ban', '.unban', '.promote', '.demote', '.kick', '.tagall', '.tagnotadmin', '.hidetag', '.antilink', '.antitag', '.setgdesc', '.setgname', '.setgpp'];
+        const adminCommands = ['.mute', '.unmute', '.ban', '.unban', '.promote', '.demote', '.kick', '.tagall', '.tagnotadmin', '.antilink', '.antitag', '.setgdesc', '.setgname', '.setgpp'];
         const isAdminCommand = adminCommands.some(cmd => userMessage.startsWith(cmd));
 
         const ownerCommands = ['.mode', '.autostatus', '.antidelete', '.cleartmp', '.setpp', '.clearsession', '.areact', '.autoreact', '.autotyping', '.autoread', '.pmblocker'];
@@ -738,36 +738,10 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             }
 
-case userMessage.startsWith('.hidetag'):
-case userMessage.startsWith('.вызов'):
-case userMessage.startsWith('.все'):
-case userMessage.startsWith('.смс'): {
-    // Определяем какая команда использовалась
-    let sliceLen;
-    if (userMessage.startsWith('.hidetag')) {
-        sliceLen = 8;
-    } else if (userMessage.startsWith('.вызов')) {
-        sliceLen = 5;
-    } else if (userMessage.startsWith('.все')) {
-        sliceLen = 4;
-    } else if (userMessage.startsWith('.смс')) {
-        sliceLen = 4;
-    }
-    
-    // Извлекаем текст после команды
-    const messageText = rawText.slice(sliceLen).trim();
-    const replyMessage = message.message?.extendedTextMessage?.contextInfo?.quotedMessage || null;
-    const hideTagCommand = getCommand('hidetag');
-    if (hideTagCommand) {
-        await hideTagCommand(sock, chatId, senderId, messageText, replyMessage, message);
-    }
-    break;
-}
-
-            case userMessage.startsWith('.tag'): {
+            case userMessage.startsWith('.вызов'): {
                 const messageText = rawText.slice(4).trim();
                 const replyMessage = message.message?.extendedTextMessage?.contextInfo?.quotedMessage || null;
-                const tagCommand = getCommand('tag');
+                const tagCommand = getCommand('вызов');
                 if (tagCommand) await tagCommand(sock, chatId, senderId, messageText, replyMessage, message);
                 break;
             }
