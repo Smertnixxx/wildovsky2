@@ -1056,12 +1056,12 @@ async function handleMessages(sock, messageUpdate, printLog) {
                         }
                     } else {
                         await sock.sendMessage(chatId, { 
-                            text: 'Sorry, only group admins can use this command.' 
+                            text: 'Только админы могут использовать эту команду.' 
                         }, { quoted: message });
                     }
                 } else {
                     await sock.sendMessage(chatId, { 
-                        text: 'This command can only be used in groups.' 
+                        text: 'Эту команду можно использовать только в группах.' 
                     }, { quoted: message });
                 }
                 break;
@@ -1081,12 +1081,12 @@ async function handleMessages(sock, messageUpdate, printLog) {
                         }
                     } else {
                         await sock.sendMessage(chatId, { 
-                            text: 'Sorry, only group admins can use this command.' 
+                            text: 'Только админы могут использовать эту команду.' 
                         }, { quoted: message });
                     }
                 } else {
                     await sock.sendMessage(chatId, { 
-                        text: 'This command can only be used in groups.' 
+                        text: 'Эту команду можно использовать только в группах.' 
                     }, { quoted: message });
                 }
                 break;
@@ -1333,6 +1333,8 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 if (setProfilePicture) await setProfilePicture(sock, chatId, message);
                 break;
             }
+
+            
 
             case userMessage.startsWith('.setgdesc'): {
                 const text = rawText.slice(9).trim();
@@ -1627,6 +1629,87 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 const zipArg = parts[1] && parts[1].startsWith('http') ? parts[1] : '';
                 const updateCommand = getCommand('update');
                 if (updateCommand) await updateCommand(sock, chatId, message, zipArg);
+                commandExecuted = true;
+                break;
+            }
+
+                        case userMessage === '.testcarousel': {
+                const sections = [
+                    {
+                        title: 'Выберите действие',
+                        rows: [
+                            {header: 'Меню', title: 'Главное меню', description: 'Открыть главное меню бота', id: '.menu'},
+                            {header: 'Помощь', title: 'Помощь', description: 'Показать справку', id: '.help'},
+                            {header: 'Инфо', title: 'Информация', description: 'Информация о боте', id: '.botinfo'}
+                        ]
+                    }
+                ];
+
+                const messages = [
+                    [
+                        'Первый слайд карусели',
+                        'Footer первого слайда',
+                        'https://telegra.ph/file/24b24c495b5384b218b2f.jpg',
+                        [
+                            ['Меню', '.menu'],
+                            ['Помощь', '.help']
+                        ],
+                        [['Скопировать текст']],
+                        [
+                            ['GitHub', 'https://github.com'],
+                            ['Google', 'https://google.com']
+                        ],
+                        [
+                            ['Открыть список', sections]
+                        ]
+                    ],
+                    [
+                        'Второй слайд карусели',
+                        'Footer второго слайда',
+                        'https://telegra.ph/file/e9239fa926d3a2ef48df2.jpg',
+                        [
+                            ['Бот инфо', '.botinfo'],
+                            ['Пинг', '.ping']
+                        ],
+                        [['Текст для копирования']],
+                        [
+                            ['YouTube', 'https://youtube.com']
+                        ],
+                        [
+                            ['Список 2', sections]
+                        ]
+                    ],
+                    [
+                        'Третий слайд карусели',
+                        'Footer третьего слайда',
+                        'https://telegra.ph/file/ec725de5925f6fb4d5647.jpg',
+                        [
+                            ['Владелец', '.owner'],
+                            ['GitHub', '.github']
+                        ],
+                        [],
+                        [
+                            ['Wikipedia', 'https://wikipedia.org']
+                        ],
+                        []
+                    ]
+                ];
+
+                try {
+                    await sock.sendCarousel(
+                        chatId,
+                        'Тестовая карусель',
+                        'Это демонстрация функции карусели',
+                        'Заголовок карусели',
+                        messages,
+                        message
+                    );
+                } catch (error) {
+                    console.error('Ошибка отправки карусели:', error);
+                    await sock.sendMessage(chatId, { 
+                        text: '❌ Ошибка при отправке карусели' 
+                    }, { quoted: message });
+                }
                 commandExecuted = true;
                 break;
             }

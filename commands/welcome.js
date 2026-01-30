@@ -5,7 +5,7 @@ let welcomeQueue = {};
 async function handleWelcome(sock, chatId, message, match) {
     if (!match) {
         return sock.sendMessage(chatId, {
-            text: `📥 *Welcome Message Setup*\n\n✅ *.welcome on* — Enable welcome messages\n🛠️ *.welcome set Your custom message* — Set a custom welcome message\n🚫 *.welcome off* — Disable welcome messages\n\n*Available Variables:*\n• @user - Mentions the new member\n• @group - Shows group name\n• @desc - Shows group description\n• @count - Shows total members`,
+            text: `⚙️ Настройка приветствия\n\n✅ *.welcome on* — Enable welcome messages\n🛠️ *.welcome set Your custom message* — Set a custom welcome message\n🚫 *.welcome off* — Disable welcome messages\n\n*Available Variables:*\n• @user - Mentions the new member\n• @group - Shows group name\n• @desc - Shows group description\n• @count - Shows total members`,
             quoted: message
         });
     }
@@ -23,10 +23,10 @@ async function handleWelcome(sock, chatId, message, match) {
 
     if (lowerMatch === 'off') {
         if (!(await isWelcomeOn(chatId))) {
-            return sock.sendMessage(chatId, { text: '⚠️ Welcome messages are *already disabled*.', quoted: message });
+            return sock.sendMessage(chatId, { text: 'Приветствия в чате итак отключено', quoted: message });
         }
         await delWelcome(chatId);
-        return sock.sendMessage(chatId, { text: '✅ Welcome messages *disabled* for this group.', quoted: message });
+        return sock.sendMessage(chatId, { text: '✅ Приветствие было отключено.', quoted: message });
     }
 
     if (lowerMatch.startsWith('set ')) {
