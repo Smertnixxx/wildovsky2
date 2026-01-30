@@ -159,7 +159,14 @@ function logDetailed({ isCommand = false, text = '', sender = '', senderName = '
     const fromLabel = chalk.green('from');
     const inLabel = chalk.green('in');
     const senderLabel = chalk.yellow(senderName || shortJid(sender));
-    const chatLabel = chalk.blue(chatName ? `${chatName}${chatIsGroup ? ' (group)' : ' (private)'}` : (chatIsGroup ? `${shortJid(chat)} (group)` : `${shortJid(chat)} (private)`));
+    const safeChatName = limit(chatName, 20);
+
+const chatLabel = chalk.blue(
+    safeChatName
+        ? `${safeChatName}${chatIsGroup ? ' (group)' : ' (private)'}`
+        : (chatIsGroup ? `${shortJid(chat)} (group)` : `${shortJid(chat)} (private)`)
+);
+
 
     console.log(
         nameDisplay,
@@ -900,6 +907,12 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 }
                 break;
             }
+
+            function limit(str = '', max = 20) {
+    if (!str) return '';
+    return str.length > max ? str.slice(0, max) + '…' : str;
+}
+
 
             case userMessage.startsWith('.insult'): {
                 const insultCmd = getCommand('insult');
