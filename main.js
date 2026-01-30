@@ -475,7 +475,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
             ) {
                 if (!isSenderAdmin && !message.key.fromMe) {
                     await sock.sendMessage(chatId, {
-                        text: 'Sorry, only group admins can use this command.',
+                        text: '👥 Эту команду можно использовать только в группе.',
                     }, { quoted: message });
                     return;
                 }
@@ -486,7 +486,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
         if (isOwnerCommand) {
             if (!message.key.fromMe && !senderIsOwnerOrSudo) {
                 await sock.sendMessage(chatId, { 
-                    text: '❌ This command is only available for the owner or sudo!' 
+                    text: '❌ Эту команду может использовать только разработчик' 
                 }, { quoted: message });
                 return;
             }

@@ -15,7 +15,7 @@ function formatTime(seconds) {
     if (minutes > 0) time += `${minutes}m `;
     if (seconds > 0 || time === '') time += `${seconds}s`;
 
-    return time.tr
+    return time.trim();
 }
 
 async function pingCommand(sock, chatId, message) {
