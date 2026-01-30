@@ -167,4 +167,4 @@ async function animeCommand(sock, chatId, message, args) {
     }
 }
 
-module.exports = { animeCommand };
+module.exports = animeCommand;
