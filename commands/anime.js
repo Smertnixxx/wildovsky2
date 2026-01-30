@@ -63,7 +63,7 @@ async function animeCommand(sock, chatId, message, args) {
         if (!command) {
             const availableCommands = Object.keys(REACTION_TYPES).join(', ');
             await sock.sendMessage(chatId, {
-                text: `🎌 *Anime Reactions*\n\nUsage: .animu <type> @user or reply to message\n\n*Available types:*\n${availableCommands}\n\n*Example:*\n.animu обнять @user\n.animu hug (reply to message)`,
+                text: `ляляляляля`,
             }, { quoted: message });
             return;
         }
@@ -71,7 +71,7 @@ async function animeCommand(sock, chatId, message, args) {
         const reaction = REACTION_TYPES[command];
         if (!reaction) {
             await sock.sendMessage(chatId, {
-                text: `❌ Unknown reaction type: ${command}\n\nUse .animu to see available types`,
+                text: `не корректная команда: ${command}`,
             }, { quoted: message });
             return;
         }
@@ -83,7 +83,7 @@ async function animeCommand(sock, chatId, message, args) {
             if (now < cooldownEnd) {
                 const timeLeft = msToTime(cooldownEnd - now);
                 await sock.sendMessage(chatId, {
-                    text: `⏳ Please wait *${timeLeft}* before using this reaction again`,
+                    text: `⏳ Подождите *${timeLeft}* перед повторным использованием команды`,
                 }, { quoted: message });
                 return;
             }
@@ -100,7 +100,7 @@ async function animeCommand(sock, chatId, message, args) {
             
             if (!targetUser) {
                 await sock.sendMessage(chatId, {
-                    text: `[❗] Please mention someone or reply to their message\n\n> 📌 Example: .animu ${command} @user`,
+                    text: `Ответь на сообщение или воспользуйся примером\n\n> 📌 Пример: .обнять ${command} @пользователь`,
                 }, { quoted: message });
                 return;
             }
@@ -119,11 +119,6 @@ async function animeCommand(sock, chatId, message, args) {
         }
 
         const gifUrl = response.data.url;
-
-        await sock.sendMessage(chatId, {
-            text: '⏳ Loading reaction...',
-        }, { quoted: message });
-
         const gifBuffer = await getBuffer(gifUrl);
         const videoBuffer = await GIFBufferToVideoBuffer(gifBuffer);
 
@@ -145,7 +140,7 @@ async function animeCommand(sock, chatId, message, args) {
     } catch (error) {
         console.error('Error in anime command:', error);
         await sock.sendMessage(chatId, {
-            text: '❌ Failed to fetch anime reaction. Please try again later.',
+            text: 'ошибка при выполнении команды.',
         }, { quoted: message });
     }
 }
