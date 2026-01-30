@@ -1,153 +1,170 @@
 const axios = require('axios');
-const { exec } = require('child_process');
-const fs = require('fs');
 const path = require('path');
-const webp = require('node-webpmux');
-const crypto = require('crypto');
+const GIFBufferToVideoBuffer = require('../lib/Gifbuffer');
 
-const ANIMU_BASE = 'https://api.some-random-api.com/animu';
+const ANIMU_API = 'https://api.waifu.pics/sfw';
 
-function normalizeType(input) {
-    const lower = (input || '').toLowerCase();
-    if (lower === 'facepalm' || lower === 'face_palm') return 'face-palm';
-    if (lower === 'quote' || lower === 'animu-quote' || lower === 'animuquote') return 'quote';
-    return lower;
+// Supported reaction types
+const REACTION_TYPES = {
+    'обнять': { endpoint: 'hug', text: 'обнял(а)' },
+    'облизнуть': { endpoint: 'lick', text: 'облизнул(а)' },
+    'погладить': { endpoint: 'pat', text: 'погладил(а)' },
+    'убить': { endpoint: 'kill', text: 'убил(а)' },
+    'кринж': { endpoint: 'cringe', text: 'кринжанул(а) с' },
+    'укусить': { endpoint: 'bite', text: 'укусил(а)' },
+    'поцеловать': { endpoint: 'kiss', text: 'поцеловал(а)' },
+    'ударить': { endpoint: 'bonk', text: 'ударил(а)' },
+    'nom': { endpoint: 'nom', text: 'nom nom' },
+    'poke': { endpoint: 'poke', text: 'poked' },
+    'cry': { endpoint: 'cry', text: 'is crying' },
+    'wink': { endpoint: 'wink', text: 'winked at' },
+    'smile': { endpoint: 'smile', text: 'smiled at' },
+    'wave': { endpoint: 'wave', text: 'waved at' },
+    'blush': { endpoint: 'blush', text: 'is blushing' },
+    'dance': { endpoint: 'dance', text: 'is dancing' },
+    'cuddle': { endpoint: 'cuddle', text: 'cuddled' },
+    'slap': { endpoint: 'slap', text: 'slapped' },
+    'kick': { endpoint: 'kick', text: 'kicked' },
+    'yeet': { endpoint: 'yeet', text: 'yeeted' },
+    'bully': { endpoint: 'bully', text: 'bullied' },
+    'happy': { endpoint: 'happy', text: 'is happy' },
+    'highfive': { endpoint: 'highfive', text: 'high-fived' },
+    'handhold': { endpoint: 'handhold', text: 'is holding hands with' },
+};
+
+// User cooldowns to prevent spam
+const userCooldowns = new Map();
+const COOLDOWN_TIME = 15000; // 15 seconds
+
+async function getBuffer(url) {
+    try {
+        const response = await axios.get(url, {
+            responseType: 'arraybuffer',
+            timeout: 15000,
+            headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        return Buffer.from(response.data);
+    } catch (error) {
+        console.error("Failed to get buffer:", error.message);
+        throw new Error("Failed to download image");
+    }
 }
 
-async function sendAnimu(sock, chatId, message, type) {
-    const endpoint = `${ANIMU_BASE}/${type}`;
-    const res = await axios.get(endpoint);
-    const data = res.data || {};
-
-    // Prefer link (gif/image). Send as sticker if applicable; fallback to image
-    // helper to convert media buffer to sticker webp
-    async function convertMediaToSticker(mediaBuffer, isAnimated) {
-        const tmpDir = path.join(process.cwd(), 'tmp');
-        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
-
-        const inputExt = isAnimated ? 'gif' : 'jpg';
-        const input = path.join(tmpDir, `animu_${Date.now()}.${inputExt}`);
-        const output = path.join(tmpDir, `animu_${Date.now()}.webp`);
-        fs.writeFileSync(input, mediaBuffer);
-
-        const ffmpegCmd = isAnimated 
-            ? `ffmpeg -y -i "${input}" -vf "scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000,fps=15" -c:v libwebp -preset default -loop 0 -vsync 0 -pix_fmt yuva420p -quality 60 -compression_level 6 "${output}"`
-            : `ffmpeg -y -i "${input}" -vf "scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000" -c:v libwebp -preset default -loop 0 -vsync 0 -pix_fmt yuva420p -quality 75 -compression_level 6 "${output}"`;
-
-        await new Promise((resolve, reject) => {
-            exec(ffmpegCmd, (err) => (err ? reject(err) : resolve()));
-        });
-
-        let webpBuffer = fs.readFileSync(output);
-
-        // Add sticker metadata
-        const img = new webp.Image();
-        await img.load(webpBuffer);
-
-        const json = {
-            'sticker-pack-id': crypto.randomBytes(32).toString('hex'),
-            'sticker-pack-name': 'Anime Stickers',
-            'emojis': ['🎌']
-        };
-        const exifAttr = Buffer.from([0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x41, 0x57, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00]);
-        const jsonBuffer = Buffer.from(JSON.stringify(json), 'utf8');
-        const exif = Buffer.concat([exifAttr, jsonBuffer]);
-        exif.writeUIntLE(jsonBuffer.length, 14, 4);
-        img.exif = exif;
-
-        const finalBuffer = await img.save(null);
-
-        try { fs.unlinkSync(input); } catch {}
-        try { fs.unlinkSync(output); } catch {}
-        return finalBuffer;
-    }
-
-    if (data.link) {
-        const link = data.link;
-        const lower = link.toLowerCase();
-        const isGifLink = lower.endsWith('.gif');
-        const isImageLink = lower.match(/\.(jpg|jpeg|png|webp)$/);
-
-        // Convert all media (GIFs and images) to stickers
-        if (isGifLink || isImageLink) {
-            try {
-                const resp = await axios.get(link, {
-                    responseType: 'arraybuffer',
-                    timeout: 15000,
-                    headers: { 'User-Agent': 'Mozilla/5.0' }
-                });
-                const mediaBuf = Buffer.from(resp.data);
-                const stickerBuf = await convertMediaToSticker(mediaBuf, isGifLink);
-                await sock.sendMessage(
-                    chatId,
-                    { sticker: stickerBuf },
-                    { quoted: message }
-                );
-                return;
-            } catch (error) {
-                console.error('Error converting media to sticker:', error);
-            }
-        }
-
-        // Fallback to image if conversion fails
-        try {
-            await sock.sendMessage(
-                chatId,
-                { image: { url: link }, caption: `anime: ${type}` },
-                { quoted: message }
-            );
-            return;
-        } catch {}
-    }
-    if (data.quote) {
-        await sock.sendMessage(
-            chatId,
-            { text: data.quote },
-            { quoted: message }
-        );
-        return;
-    }
-
-    await sock.sendMessage(
-        chatId,
-        { text: '❌ Failed to fetch animu.' },
-        { quoted: message }
-    );
+function msToTime(duration) {
+    const seconds = Math.floor((duration / 1000) % 60);
+    return `${seconds} секунд`;
 }
 
 async function animeCommand(sock, chatId, message, args) {
-    const subArg = args && args[0] ? args[0] : '';
-    const sub = normalizeType(subArg);
-
-    const supported = [
-        'nom', 'poke', 'cry', 'kiss', 'pat', 'hug', 'wink', 'face-palm', 'quote'
-    ];
-
     try {
-        if (!sub) {
-            // Fetch supported types from API for dynamic help
-            try {
-                const res = await axios.get(ANIMU_BASE);
-                const apiTypes = res.data && res.data.types ? res.data.types.map(s => s.replace('/animu/', '')).join(', ') : supported.join(', ');
-                await sock.sendMessage(chatId, { text: `Usage: .animu <type>\nTypes: ${apiTypes}` }, { quoted: message });
-            } catch {
-                await sock.sendMessage(chatId, { text: `Usage: .animu <type>\nTypes: ${supported.join(', ')}` }, { quoted: message });
+        const senderId = message.key.participant || message.key.remoteJid;
+        const isGroup = chatId.endsWith('@g.us');
+        
+        // Get command from args
+        const command = args[0]?.toLowerCase();
+        
+        if (!command) {
+            const availableCommands = Object.keys(REACTION_TYPES).join(', ');
+            await sock.sendMessage(chatId, {
+                text: `🎌 *Anime Reactions*\n\nUsage: .animu <type> @user or reply to message\n\n*Available types:*\n${availableCommands}\n\n*Example:*\n.animu обнять @user\n.animu hug (reply to message)`,
+            }, { quoted: message });
+            return;
+        }
+
+        // Check if command exists
+        const reaction = REACTION_TYPES[command];
+        if (!reaction) {
+            await sock.sendMessage(chatId, {
+                text: `❌ Unknown reaction type: ${command}\n\nUse .animu to see available types`,
+            }, { quoted: message });
+            return;
+        }
+
+        // Check cooldown
+        const cooldownKey = `${senderId}_${command}`;
+        const now = Date.now();
+        if (userCooldowns.has(cooldownKey)) {
+            const cooldownEnd = userCooldowns.get(cooldownKey);
+            if (now < cooldownEnd) {
+                const timeLeft = msToTime(cooldownEnd - now);
+                await sock.sendMessage(chatId, {
+                    text: `⏳ Please wait *${timeLeft}* before using this reaction again`,
+                }, { quoted: message });
+                return;
             }
-            return;
         }
 
-        if (!supported.includes(sub)) {
-            await sock.sendMessage(chatId, { text: `❌ Unsupported type: ${sub}. Try one of: ${supported.join(', ')}` }, { quoted: message });
-            return;
+        // Get target user
+        let targetUser;
+        if (isGroup) {
+            // Check for mentioned user
+            const mentionedJid = message.message?.extendedTextMessage?.contextInfo?.mentionedJid;
+            if (mentionedJid && mentionedJid.length > 0) {
+                targetUser = mentionedJid[0];
+            } else if (message.message?.extendedTextMessage?.contextInfo?.quotedMessage) {
+                // Check for quoted message
+                targetUser = message.message.extendedTextMessage.contextInfo.participant;
+            }
+            
+            if (!targetUser) {
+                await sock.sendMessage(chatId, {
+                    text: `[❗] Please mention someone or reply to their message\n\n> 📌 Example: .animu ${command} @user`,
+                }, { quoted: message });
+                return;
+            }
+        } else {
+            targetUser = chatId;
         }
 
-        await sendAnimu(sock, chatId, message, sub);
-    } catch (err) {
-        console.error('Error in animu command:', err);
-        await sock.sendMessage(chatId, { text: '❌ An error occurred while fetching animu.' }, { quoted: message });
+        // Set cooldown
+        userCooldowns.set(cooldownKey, now + COOLDOWN_TIME);
+        setTimeout(() => userCooldowns.delete(cooldownKey), COOLDOWN_TIME);
+
+        // Fetch anime GIF from API
+        const apiUrl = `${ANIMU_API}/${reaction.endpoint}`;
+        const response = await axios.get(apiUrl);
+        
+        if (!response.data || !response.data.url) {
+            throw new Error('Invalid API response');
+        }
+
+        const gifUrl = response.data.url;
+
+        // Download GIF
+        await sock.sendMessage(chatId, {
+            text: '⏳ Loading reaction...',
+        }, { quoted: message });
+
+        const gifBuffer = await getBuffer(gifUrl);
+
+        // Convert GIF to video
+        const videoBuffer = await GIFBufferToVideoBuffer(gifBuffer);
+
+        // Get additional user text if provided
+        const userText = args.slice(1).join(' ');
+
+        // Create caption
+        let caption = `> *@${senderId.split("@")[0]}* ${reaction.text} *@${targetUser.split('@')[0]}*`;
+        
+        if (userText.trim().length > 0) {
+            caption += `\n> 💬 Со словами: *${userText}*`;
+        }
+
+        // Send video with caption
+        await sock.sendMessage(chatId, {
+            video: videoBuffer,
+            caption: caption,
+            gifPlayback: true,
+            gifAttribution: 0,
+            mentions: [targetUser, senderId]
+        }, { quoted: message });
+
+    } catch (error) {
+        console.error('Error in anime command:', error);
+        await sock.sendMessage(chatId, {
+            text: '❌ Failed to fetch anime reaction. Please try again later.',
+        }, { quoted: message });
     }
 }
 
 module.exports = { animeCommand };
-
-

@@ -1477,7 +1477,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             }
 
-            case userMessage === '.goodnight':
+case userMessage === '.goodnight':
             case userMessage === '.lovenight':
             case userMessage === '.gn': {
                 const goodnightCmd = getCommand('goodnight');
@@ -1571,7 +1571,11 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             }
 
+            // ============================================
+            // 🎌 ANIME REACTIONS - РАСШИРЕННАЯ ВЕРСИЯ
+            // ============================================
             case userMessage.startsWith('.animu'):
+            // Основные английские команды:
             case userMessage.startsWith('.nom'):
             case userMessage.startsWith('.poke'):
             case userMessage.startsWith('.cry'):
@@ -1579,19 +1583,47 @@ async function handleMessages(sock, messageUpdate, printLog) {
             case userMessage.startsWith('.pat'):
             case userMessage.startsWith('.hug'):
             case userMessage.startsWith('.wink'):
+            case userMessage.startsWith('.smile'):
+            case userMessage.startsWith('.wave'):
+            case userMessage.startsWith('.blush'):
+            case userMessage.startsWith('.dance'):
+            case userMessage.startsWith('.cuddle'):
+            case userMessage.startsWith('.slap'):
+            case userMessage.startsWith('.kick'):
+            case userMessage.startsWith('.yeet'):
+            case userMessage.startsWith('.bully'):
+            case userMessage.startsWith('.happy'):
+            case userMessage.startsWith('.highfive'):
+            case userMessage.startsWith('.handhold'):
+            // Русские команды:
+            case userMessage.startsWith('.обнять'):
+            case userMessage.startsWith('.облизнуть'):
+            case userMessage.startsWith('.погладить'):
+            case userMessage.startsWith('.убить'):
+            case userMessage.startsWith('.кринж'):
+            case userMessage.startsWith('.укусить'):
+            case userMessage.startsWith('.поцеловать'):
+            case userMessage.startsWith('.ударить'):
+            // Устаревшие команды (для совместимости):
             case userMessage.startsWith('.facepalm'):
             case userMessage.startsWith('.face-palm'):
             case userMessage.startsWith('.animuquote'):
             case userMessage.startsWith('.loli'): {
                 const parts = userMessage.trim().split(/\s+/);
                 let sub = parts[0].slice(1);
+                
+                // Нормализация команд
                 if (sub === 'facepalm') sub = 'face-palm';
                 if (sub === 'quote' || sub === 'animuquote') sub = 'quote';
+                
                 const args = sub === 'animu' ? parts.slice(1) : [sub];
+                
                 const animeCmd = getCommand('anime');
                 if (animeCmd?.animeCommand) {
                     await animeCmd.animeCommand(sock, chatId, message, args);
                 }
+                
+                commandExecuted = true;
                 break;
             }
 
