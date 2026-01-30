@@ -739,9 +739,10 @@ async function handleMessages(sock, messageUpdate, printLog) {
             }
 
             case userMessage.startsWith('.вызов'): {
-                const messageText = rawText.slice(4).trim();
+                // Delegate to existing 'tag' command (no separate file needed)
+                const messageText = rawText.split(' ').slice(1).join(' ').trim(); // text after command
                 const replyMessage = message.message?.extendedTextMessage?.contextInfo?.quotedMessage || null;
-                const tagCommand = getCommand('вызов');
+                const tagCommand = getCommand('tag');
                 if (tagCommand) await tagCommand(sock, chatId, senderId, messageText, replyMessage, message);
                 break;
             }
