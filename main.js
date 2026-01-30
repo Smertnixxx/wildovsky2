@@ -449,7 +449,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
             if (!isBotAdmin) {
                 await sock.sendMessage(chatId, { 
-                    text: 'Please make the bot an admin to use admin commands.' 
+                    text: '❌ Дайте боту права администратора для использования этой команды' 
                 }, { quoted: message });
                 return;
             }

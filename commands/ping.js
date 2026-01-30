@@ -15,7 +15,7 @@ function formatTime(seconds) {
     if (minutes > 0) time += `${minutes}m `;
     if (seconds > 0 || time === '') time += `${seconds}s`;
 
-    return time.trim();
+    return time.tr
 }
 
 async function pingCommand(sock, chatId, message) {
@@ -33,7 +33,7 @@ async function pingCommand(sock, chatId, message) {
         const uptimeFormatted = formatTime(uptimeInSeconds);
 
         const botInfo = `
-пинг бота - ${ping} ms
+пинг ботаааааааффф - ${ping} ms
 время его работы - ${uptimeFormatted}
 `.trim();
         await sock.sendMessage(chatId, { text: botInfo, edit: statusKey });
