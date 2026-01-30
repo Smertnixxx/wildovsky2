@@ -740,7 +740,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
             case userMessage === '.hidetag':
             case userMessage === '.вызов':
-            case userMessage === '.все':
+            case userMessage.startsWith('.все'):
             case userMessage === '.смс': {
                 const sliceLen = userMessage.startsWith('.hidetag') ? 8 : 4;
                 const messageText = rawText.slice(sliceLen).trim();
