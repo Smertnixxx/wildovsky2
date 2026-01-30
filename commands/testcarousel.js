@@ -5,7 +5,7 @@ async function testcarousel(sock, chatId, message) {
             rows: [
                 {header: 'Меню', title: 'Главное меню', description: 'Открыть главное меню бота', id: '.menu'},
                 {header: 'Помощь', title: 'Помощь', description: 'Показать справку', id: '.help'},
-                {header: 'Инфо', title: 'Информация', description: 'Информация о боте', id: '.info'}
+                {header: 'Инфо', title: 'Информация', description: 'Информация о боте', id: '.botinfo'}
             ]
         }
     ];
@@ -19,7 +19,7 @@ async function testcarousel(sock, chatId, message) {
                 ['Кнопка 1', '.menu'],
                 ['Кнопка 2', '.help']
             ],
-            [['Текст для копирования']],
+            [['Текст для копирования 1'], ['Текст для копирования 2']],  // Изменено: массив массивов
             [
                 ['GitHub', 'https://github.com'],
                 ['Google', 'https://google.com']
@@ -36,7 +36,7 @@ async function testcarousel(sock, chatId, message) {
                 ['Кнопка А', '.test1'],
                 ['Кнопка Б', '.test2']
             ],
-            [['Копировать это']],
+            [['Копировать это 1'], ['Копировать это 2']],  // Изменено: массив массивов
             [
                 ['YouTube', 'https://youtube.com']
             ],
@@ -52,11 +52,11 @@ async function testcarousel(sock, chatId, message) {
                 ['Кнопка X', '.test3'],
                 ['Кнопка Y', '.test4']
             ],
-            [],
+            [],  // Пустой массив для copy
             [
                 ['Wikipedia', 'https://wikipedia.org']
             ],
-            []
+            []  // Пустой массив для list
         ]
     ];
 
@@ -73,7 +73,7 @@ async function testcarousel(sock, chatId, message) {
         await sock.sendMessage(chatId, { text: '✅ Карусель отправлена успешно' }, { quoted: message });
     } catch (error) {
         console.error('Ошибка отправки карусели:', error);
-        await sock.sendMessage(chatId, { text: '❌ Ошибка при отправке карусели' }, { quoted: message });
+        await sock.sendMessage(chatId, { text: '❌ Ошибка при отправке карусели\n' + error.message }, { quoted: message });
     }
 }
 
