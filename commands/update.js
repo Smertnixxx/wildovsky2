@@ -15,34 +15,30 @@ async function updateCommand(sock, chatId, message) {
     const isOwner = await isOwnerOrSudo(senderId, sock, chatId);
 
     if (!message.key.fromMe && !isOwner) {
-        await sock.sendMessage(
-            chatId,
-            { text: 'тебе нельзя' },
-            { quoted: message }
-        );
+        await sock.sendMessage(chatId, { text: 'тебе нельзя' }, { quoted: message });
         return;
     }
 
     try {
-        await sock.sendMessage(
+        const sent = await sock.sendMessage(
             chatId,
             { text: 'обновляю...' },
             { quoted: message }
         );
 
+        const statusKey = sent.key;
         const output = await run('git pull');
 
-        let reply;
+        let text;
         if (output.includes('Already up to date')) {
-            reply = 'обновлений нет';
+            text = 'обновлений нет';
         } else {
-            reply = `✅ Обновлено:\n\n${output}`;
+text = `Обновлено\n\n${output}`;
         }
 
         await sock.sendMessage(
             chatId,
-            { text: reply },
-            { quoted: message }
+            { text, edit: statusKey }
         );
     } catch (err) {
         await sock.sendMessage(
