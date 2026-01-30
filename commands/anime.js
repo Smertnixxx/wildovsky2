@@ -1,5 +1,5 @@
 const axios = require('axios');
-const GIFBufferToVideoBuffer = require('./lib/Gifbuffer');
+const GIFBufferToVideoBuffer = require('./lib/avantyra');
 
 const ANIMU_API = 'https://api.waifu.pics/sfw';
 

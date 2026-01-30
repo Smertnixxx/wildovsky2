@@ -37,6 +37,7 @@ const ffmpeg = require('fluent-ffmpeg');
 const { isSudo } = require('./lib/index');
 const isOwnerOrSudo = require('./lib/isOwner');
 const isAdmin = require('./lib/isAdmin');
+const avantyra = require('./lib/avantyra');
 const { Antilink } = require('./lib/antilink');
 const getDisplayName = require('./lib/getDisplayName');
 
