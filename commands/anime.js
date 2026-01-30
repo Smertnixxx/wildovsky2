@@ -1,10 +1,8 @@
 const axios = require('axios');
-const path = require('path');
-const GIFBufferToVideoBuffer = require('../lib/Gifbuffer');
+const GIFBufferToVideoBuffer = require('./lib/Gifbuffer');
 
 const ANIMU_API = 'https://api.waifu.pics/sfw';
 
-// Supported reaction types
 const REACTION_TYPES = {
     'обнять': { endpoint: 'hug', text: 'обнял(а)' },
     'облизнуть': { endpoint: 'lick', text: 'облизнул(а)' },
@@ -32,9 +30,8 @@ const REACTION_TYPES = {
     'handhold': { endpoint: 'handhold', text: 'is holding hands with' },
 };
 
-// User cooldowns to prevent spam
 const userCooldowns = new Map();
-const COOLDOWN_TIME = 15000; // 15 seconds
+const COOLDOWN_TIME = 15000;
 
 async function getBuffer(url) {
     try {
@@ -60,7 +57,6 @@ async function animeCommand(sock, chatId, message, args) {
         const senderId = message.key.participant || message.key.remoteJid;
         const isGroup = chatId.endsWith('@g.us');
         
-        // Get command from args
         const command = args[0]?.toLowerCase();
         
         if (!command) {
@@ -71,7 +67,6 @@ async function animeCommand(sock, chatId, message, args) {
             return;
         }
 
-        // Check if command exists
         const reaction = REACTION_TYPES[command];
         if (!reaction) {
             await sock.sendMessage(chatId, {
@@ -80,7 +75,6 @@ async function animeCommand(sock, chatId, message, args) {
             return;
         }
 
-        // Check cooldown
         const cooldownKey = `${senderId}_${command}`;
         const now = Date.now();
         if (userCooldowns.has(cooldownKey)) {
@@ -94,15 +88,12 @@ async function animeCommand(sock, chatId, message, args) {
             }
         }
 
-        // Get target user
         let targetUser;
         if (isGroup) {
-            // Check for mentioned user
             const mentionedJid = message.message?.extendedTextMessage?.contextInfo?.mentionedJid;
             if (mentionedJid && mentionedJid.length > 0) {
                 targetUser = mentionedJid[0];
             } else if (message.message?.extendedTextMessage?.contextInfo?.quotedMessage) {
-                // Check for quoted message
                 targetUser = message.message.extendedTextMessage.contextInfo.participant;
             }
             
@@ -116,11 +107,9 @@ async function animeCommand(sock, chatId, message, args) {
             targetUser = chatId;
         }
 
-        // Set cooldown
         userCooldowns.set(cooldownKey, now + COOLDOWN_TIME);
         setTimeout(() => userCooldowns.delete(cooldownKey), COOLDOWN_TIME);
 
-        // Fetch anime GIF from API
         const apiUrl = `${ANIMU_API}/${reaction.endpoint}`;
         const response = await axios.get(apiUrl);
         
@@ -130,27 +119,20 @@ async function animeCommand(sock, chatId, message, args) {
 
         const gifUrl = response.data.url;
 
-        // Download GIF
         await sock.sendMessage(chatId, {
             text: '⏳ Loading reaction...',
         }, { quoted: message });
 
         const gifBuffer = await getBuffer(gifUrl);
-
-        // Convert GIF to video
         const videoBuffer = await GIFBufferToVideoBuffer(gifBuffer);
 
-        // Get additional user text if provided
         const userText = args.slice(1).join(' ');
-
-        // Create caption
         let caption = `> *@${senderId.split("@")[0]}* ${reaction.text} *@${targetUser.split('@')[0]}*`;
         
         if (userText.trim().length > 0) {
             caption += `\n> 💬 Со словами: *${userText}*`;
         }
 
-        // Send video with caption
         await sock.sendMessage(chatId, {
             video: videoBuffer,
             caption: caption,
@@ -167,4 +149,7 @@ async function animeCommand(sock, chatId, message, args) {
     }
 }
 
-module.exports = animeCommand;
+// Экспорт как объекта с методом animeCommand
+module.exports = {
+    animeCommand: animeCommand
+};
