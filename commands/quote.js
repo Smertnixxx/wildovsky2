@@ -7,50 +7,61 @@ const webp = require('node-webpmux');
 const crypto = require('crypto');
 
 async function quoteCommand(sock, chatId, message, text) {
-    let srcText = text;
+    const ctx = message.message?.extendedTextMessage?.contextInfo;
 
-    if (!srcText && message.message?.extendedTextMessage?.contextInfo?.quotedMessage?.conversation) {
-        srcText = message.message.extendedTextMessage.contextInfo.quotedMessage.conversation;
+    let srcText = text;
+    if (!srcText && ctx?.quotedMessage?.conversation) {
+        srcText = ctx.quotedMessage.conversation;
     }
 
     if (!srcText) {
-        await sock.sendMessage(chatId, { text: 'Напиши текст или ответь на сообщение с текстом' }, { quoted: message });
+        await sock.sendMessage(
+            chatId,
+            { text: 'Напиши текст или ответь на сообщение с текстом' },
+            { quoted: message }
+        );
         return;
+    }
+
+    let senderId = ctx?.participant
+        ? ctx.participant
+        : message.key.participant || message.key.remoteJid;
+
+    if (senderId.endsWith('@lid')) {
+        senderId = ctx?.participant || message.key.remoteJid;
     }
 
     const words = srcText.split(' ');
     const maxWords = 5;
     const maxLen = 30;
 
-    let out = '';
+    let formatted = '';
     let line = '';
 
     for (let i = 0; i < words.length; i++) {
         let w = words[i];
 
         while (w.length > maxLen) {
-            out += w.slice(0, maxLen) + '\n';
+            formatted += w.slice(0, maxLen) + '\n';
             w = w.slice(maxLen);
         }
 
         if ((line + w).length <= maxLen) {
             line += w + ' ';
         } else {
-            out += line.trim() + '\n';
+            formatted += line.trim() + '\n';
             line = w + ' ';
         }
 
         if ((i + 1) % maxWords === 0) {
-            out += line.trim() + '\n';
+            formatted += line.trim() + '\n';
             line = '';
         }
     }
 
-    if (line.trim()) out += line.trim();
+    if (line.trim()) formatted += line.trim();
 
-    const senderId = message.key.participant || message.key.remoteJid;
     let name = 'user';
-
     try {
         const getDisplayName = require('../lib/getDisplayName');
         const resolved = await getDisplayName(sock, senderId);
@@ -78,7 +89,7 @@ async function quoteCommand(sock, chatId, message, text) {
                 name,
                 photo: { url: avatar }
             },
-            text: out
+            text: formatted
         }]
     };
 
@@ -135,9 +146,13 @@ async function quoteCommand(sock, chatId, message, text) {
 
     img.exif = exif;
 
-    const final = await img.save(null);
+    const finalBuffer = await img.save(null);
 
-    await sock.sendMessage(chatId, { sticker: final }, { quoted: message });
+    await sock.sendMessage(
+        chatId,
+        { sticker: finalBuffer },
+        { quoted: message }
+    );
 
     try {
         fs.unlinkSync(pngPath);
