@@ -732,6 +732,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             }
 
+            case userMessage === '.ботинфо':
             case userMessage === '.botinfo': {
                 const botinfoCommand = getCommand('botinfo');
                 if (botinfoCommand) await botinfoCommand(sock, chatId, senderId, message);
@@ -741,6 +742,12 @@ async function handleMessages(sock, messageUpdate, printLog) {
             case userMessage.startsWith('#вызов'):
             case userMessage.startsWith('#все'):
             case userMessage.startsWith('.вызов'): {
+                                if (!isGroup) {
+                    await sock.sendMessage(chatId, {
+                        text: 'Эту команду можно использовать только в группах.',
+                    }, { quoted: message });
+                    return;
+                }
                 const messageText = rawText.split(' ').slice(1).join(' ').trim(); // text after command
                 const replyMessage = message.message?.extendedTextMessage?.contextInfo?.quotedMessage || null;
                 const tagCommand = getCommand('tag');
@@ -748,7 +755,8 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             }
 
-            case userMessage.startsWith('.antilink'): {
+            case userMessage.startsWith('.антиссылка'):
+                        case userMessage.startsWith('.antilink'): {
                 if (!isGroup) {
                     await sock.sendMessage(chatId, {
                         text: 'Эту команду можно использовать только в группах.',

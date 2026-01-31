@@ -14,62 +14,62 @@ async function handleAntilinkCommand(sock, chatId, userMessage, senderId, isSend
         const action = args[0];
 
         if (!action) {
-            const usage = `настройка антиссылки\n\n${prefix}antilink on\n${prefix}antilink set delete | kick | warn\n${prefix}antilink off\n`;
+            const usage = `настройка антиссылки\n\n${prefix}антиссылка вкл\n\n${prefix}антиссылка выкл\n${prefix}antilink set delete | kick | warn`;
             await sock.sendMessage(chatId, { text: usage }, { quoted: message });
             return;
         }
 
         switch (action) {
-            case 'on':
-                const existingConfig = await getAntilink(chatId, 'on');
+            case 'вкл':
+                const existingConfig = await getAntilink(chatId, 'вкл');
                 if (existingConfig?.enabled) {
                     await sock.sendMessage(chatId, { text: 'Антиссылка и так включена' }, { quoted: message });
                     return;
                 }
-                const result = await setAntilink(chatId, 'on', 'delete');
+                const result = await setAntilink(chatId, 'вкл', 'удалять');
                 await sock.sendMessage(chatId, { 
                     text: result ? 'антиссылка включена' : 'не удалось включить антиссылку' 
                 },{ quoted: message });
                 break;
 
-            case 'off':
-                await removeAntilink(chatId, 'on');
+            case 'выкл':
+                await removeAntilink(chatId, 'вкл');
                 await sock.sendMessage(chatId, { text: 'антиссылка выключена' }, { quoted: message });
                 break;
 
-            case 'set':
+            case 'условие':
                 if (args.length < 2) {
                     await sock.sendMessage(chatId, { 
-                        text: `Пожалуйста, укажите действие: ${prefix}antilink set delete | kick | warn` 
+                        text: `Пожалуйста, укажите действие: ${prefix}антиссылка условие удалять | кикать | предупреждать` 
                     }, { quoted: message });
                     return;
                 }
                 const setAction = args[1];
-                if (!['delete', 'kick', 'warn'].includes(setAction)) {
+                if (!['удалять', 'кикать', 'предупреждать'].includes(setAction)) {
                     await sock.sendMessage(chatId, { 
-                        text: '*_Неверное действие. Выберите delete, kick или warn._*' 
+                        text: 'Вы не правильно набрали команду, выберите либо удалять либо кикать либо предупреждать.' 
                     }, { quoted: message });
                     return;
                 }
-                const setResult = await setAntilink(chatId, 'on', setAction);
+                const setResult = await setAntilink(chatId, 'вкл', setAction);
                 await sock.sendMessage(chatId, { 
                     text: setResult ? `Действие антиссылки установлено на ${setAction}` : 'Не удалось установить действие антиссылки' 
                 }, { quoted: message });
                 break;
 
             case 'get':
-                const status = await getAntilink(chatId, 'on');
-                const actionConfig = await getAntilink(chatId, 'on');
+                const status = await getAntilink(chatId, 'вкл');
+                const actionConfig = await getAntilink(chatId, 'вкл');
                 await sock.sendMessage(chatId, { 
                     text: `Конфиг антиссылки:\nСтатус: ${status ? 'вкл' : 'выкл'}\nДействие: ${actionConfig ? actionConfig.action : 'Не установлено'}` 
                 }, { quoted: message });
                 break;
 
             default:
-                await sock.sendMessage(chatId, { text: `Используйте ${prefix}antilink для справки.` });
+                await sock.sendMessage(chatId, { text: `Используйте ${prefix}антиссылка\nдля справки` });
         }
     } catch (error) {
-        console.error('Ошибка в команде antilink:', error);
+        console.error('Ошибка:', error);
         await sock.sendMessage(chatId, { text: 'Ошибка обработки команды антиссылки' });
     }
 }
