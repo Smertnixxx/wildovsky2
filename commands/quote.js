@@ -13,6 +13,9 @@ async function quoteCommand(sock, chatId, message, text) {
     if (!srcText && ctx?.quotedMessage?.conversation) {
         srcText = ctx.quotedMessage.conversation;
     }
+    if (!srcText && ctx?.quotedMessage?.extendedTextMessage?.text) {
+        srcText = ctx.quotedMessage.extendedTextMessage.text;
+    }
 
     if (!srcText) {
         await sock.sendMessage(
@@ -23,20 +26,31 @@ async function quoteCommand(sock, chatId, message, text) {
         return;
     }
 
-    // determine sender JID (prefer the quoted participant when replying)
-    let senderId = ctx?.participant
-        ? ctx.participant
-        : (message.key.participant || message.key.remoteJid || '');
-
-    // Normalize senderId:
-    // - If it's only digits (no @), append the standard domain so getDisplayName can resolve it.
-    // - If it comes with the internal '@lid' domain, convert it to the standard WhatsApp JID.
-    if (typeof senderId === 'string') {
-        if (!senderId.includes('@')) {
-            senderId = `${senderId}@s.whatsapp.net`;
-        } else if (senderId.endsWith('@lid')) {
-            senderId = senderId.replace(/@lid$/, '@s.whatsapp.net');
+    // ============================================
+    // 🔧 ИСПРАВЛЕНИЕ: Правильное получение senderId
+    // ============================================
+    let senderId;
+    let senderLid; // Сохраняем оригинальный LID для получения имени
+    
+    // В группах используем participant из quoted message или из ключа сообщения
+    if (chatId.endsWith('@g.us')) {
+        // Приоритет: quoted participant > message participant
+        senderId = ctx?.participant || message.key?.participant || message.key?.remoteJid;
+        senderLid = senderId; // Сохраняем оригинальный LID
+        
+        // Конвертируем @lid в @s.whatsapp.net для получения аватарки
+        if (senderId && senderId.endsWith('@lid')) {
+            const lidNumber = senderId.split('@')[0];
+            senderId = `${lidNumber}@s.whatsapp.net`;
         }
+    } else {
+        // В личных сообщениях
+        senderId = message.key?.remoteJid || message.key?.participant || '';
+    }
+
+    // Нормализация senderId
+    if (typeof senderId === 'string' && !senderId.includes('@')) {
+        senderId = `${senderId}@s.whatsapp.net`;
     }
 
     const words = srcText.split(' ');
@@ -69,116 +83,126 @@ async function quoteCommand(sock, chatId, message, text) {
 
     if (line.trim()) formatted += line.trim();
 
-    // Collect debugging info and send it as a chat message (instead of console)
-    const debugLines = [];
-    debugLines.push(`[quote] ctx participant: ${ctx?.participant || 'null'}`);
-    debugLines.push(`[quote] message.key participant: ${message.key?.participant || 'null'} remoteJid: ${message.key?.remoteJid || 'null'}`);
-    debugLines.push(`[quote] derived senderId: ${senderId || 'null'}`);
-    debugLines.push(`[quote] sock.contacts available count: ${sock.contacts ? Object.keys(sock.contacts).length : 0}`);
-    if (sock.contacts && sock.contacts[senderId]) {
-        try {
-            const contactStr = JSON.stringify(sock.contacts[senderId]);
-            debugLines.push(`[quote] contact entry for senderId: ${contactStr.length > 800 ? contactStr.slice(0, 800) + '... (truncated)' : contactStr}`);
-        } catch {
-            debugLines.push('[quote] contact entry for senderId: [unserializable]');
-        }
-    }
-
+    // ============================================
+    // 🔧 ИСПРАВЛЕНИЕ: Правильное получение имени
+    // ============================================
     let name = 'user';
+    
     try {
-        const getDisplayName = require('../lib/getDisplayName');
-        debugLines.push(`[quote] calling getDisplayName with jid=${senderId}`);
-        const resolved = await getDisplayName(sock, senderId);
-        debugLines.push(`[quote] getDisplayName returned: ${resolved || 'null'}`);
-
-        // If resolved looks like a numeric id (no real display name), try fallbacks:
-        const looksNumeric = resolved && String(resolved).replace(/\D/g, '').length === String(resolved).length;
-
-        if (resolved && !looksNumeric) {
-            name = resolved;
-        } else {
-            // 1) Try sock.contacts (may be populated)
+        // 1) Сначала пробуем получить имя из метаданных группы (САМЫЙ НАДЁЖНЫЙ СПОСОБ)
+        if (chatId.endsWith('@g.us')) {
             try {
-                if (sock.contacts && sock.contacts[senderId]) {
-                    const c = sock.contacts[senderId];
-                    if (c.notify) name = c.notify;
-                    else if (c.name) name = c.name;
-                    else if (c.vname) name = c.vname;
-                }
-            } catch (e) {}
-
-            // 2) Try group metadata participants (if in a group)
-            if ((!name || name === 'user' || looksNumeric) && message.key && message.key.remoteJid && message.key.remoteJid.endsWith('@g.us')) {
-                try {
-                    const { getGroupMetadata } = require('../lib/groupCache');
-                    const meta = await getGroupMetadata(sock, message.key.remoteJid).catch(() => null);
-                    if (meta && Array.isArray(meta.participants)) {
-                        const short = senderId.split('@')[0];
-                        const p = meta.participants.find(px => (px.id || '').includes(short));
-                        if (p) {
-                            if (p.notify) name = p.notify;
-                            else if (p.vname) name = p.vname;
-                        }
+                const groupMeta = await sock.groupMetadata(chatId).catch(() => null);
+                if (groupMeta && groupMeta.participants) {
+                    // Ищем участника по LID (оригинальному идентификатору)
+                    const participant = groupMeta.participants.find(p => {
+                        const pId = p.id || '';
+                        const pLid = p.lid || '';
+                        
+                        // Сравниваем и с обычным id и с lid
+                        return pId === senderLid || 
+                               pId === senderId || 
+                               pLid === senderLid ||
+                               pId.split('@')[0] === (senderLid || '').split('@')[0];
+                    });
+                    
+                    if (participant) {
+                        // Приоритет: notify (пушнейм) > vname (имя в контактах) > имя из профиля
+                        name = participant.notify || participant.vname || participant.name || name;
+                        console.log(`[quote] Found name from group metadata: ${name}`);
                     }
-                } catch (e) {}
+                }
+            } catch (e) {
+                console.error('[quote] Error getting group metadata:', e);
             }
-
-            // 3) Try reading pushName from quoted message context (best-effort)
-            if ((!name || name === 'user' || looksNumeric) && ctx?.quotedMessage) {
-                try {
-                    const quoted = ctx.quotedMessage;
-                    // extendedTextMessage may carry a 'contextInfo' with 'participant' and 'extendedTextMessage'
-                    const pn = message.message?.extendedTextMessage?.contextInfo?.participant || message.key?.participant || '';
-                    if (pn && pn === senderId && message.pushName) name = message.pushName;
-                } catch (e) {}
-            }
-
-            // final fallback: use resolved even if numeric
-            if ((!name || name === 'user') && resolved) name = resolved;
         }
+        
+        // 2) Если не нашли в метаданных группы, пробуем pushName из сообщения
+        if (name === 'user' && message.pushName) {
+            name = message.pushName;
+            console.log(`[quote] Using pushName: ${name}`);
+        }
+        
+        // 3) Пробуем getDisplayName как fallback
+        if (name === 'user') {
+            const getDisplayName = require('../lib/getDisplayName');
+            const resolved = await getDisplayName(sock, senderId).catch(() => null);
+            if (resolved && String(resolved).replace(/\D/g, '').length !== String(resolved).length) {
+                name = resolved;
+                console.log(`[quote] Using getDisplayName: ${name}`);
+            }
+        }
+        
+        // 4) Проверяем sock.contacts
+        if (name === 'user' && sock.contacts && sock.contacts[senderId]) {
+            const c = sock.contacts[senderId];
+            name = c.notify || c.name || c.vname || name;
+            console.log(`[quote] Using sock.contacts: ${name}`);
+        }
+        
     } catch (err) {
-        debugLines.push(`[quote] getDisplayName error: ${err && err.message ? err.message : String(err)}`);
+        console.error('[quote] Error getting name:', err);
     }
 
-    // Send debug info to the chat (quoted to the original message)
-    try {
-        await sock.sendMessage(chatId, { text: debugLines.join('\n') }, { quoted: message });
-    } catch (e) {
-        // ignore send errors
-    }
-
-    // Try multiple ways to fetch avatar: prefer senderId but fallback to other participant identifiers
-    let avatar;
+    // ============================================
+    // 🔧 ИСПРАВЛЕНИЕ: Правильное получение аватарки
+    // ============================================
+    let avatar = null;
+    
+    // Пробуем разные варианты ID для получения аватарки
     const tryIds = [];
-    if (senderId) tryIds.push(senderId);
-    if (ctx?.participant) {
-        let p = ctx.participant;
-        if (p.endsWith('@lid')) p = p.replace(/@lid$/, '@s.whatsapp.net');
-        if (!p.includes('@')) p = `${p}@s.whatsapp.net`;
-        tryIds.push(p);
-    }
-    if (message.key?.participant) {
-        let p = message.key.participant;
-        if (p.endsWith('@lid')) p = p.replace(/@lid$/, '@s.whatsapp.net');
-        if (!p.includes('@')) p = `${p}@s.whatsapp.net`;
-        tryIds.push(p);
-    }
-    if (message.key?.remoteJid && message.key.remoteJid.endsWith('@g.us') && ctx?.participant) {
-        // as a last resort, try participant id combined with group domain
-        const short = ctx.participant.split('@')[0];
-        tryIds.push(`${short}@s.whatsapp.net`);
-    }
-
-    avatar = null;
-    for (const idTry of tryIds) {
+    
+    // В группах: сначала пробуем оригинальный participant (может быть @lid)
+    if (chatId.endsWith('@g.us')) {
+        if (ctx?.participant) tryIds.push(ctx.participant);
+        if (message.key?.participant) tryIds.push(message.key.participant);
+        
+        // Конвертированные версии
+        if (senderId) tryIds.push(senderId);
+        
+        // Пробуем получить из метаданных группы
         try {
+            const groupMeta = await sock.groupMetadata(chatId).catch(() => null);
+            if (groupMeta && groupMeta.participants) {
+                const participant = groupMeta.participants.find(p => {
+                    const pId = p.id || '';
+                    return pId === senderLid || 
+                           pId === senderId || 
+                           pId.split('@')[0] === (senderLid || '').split('@')[0];
+                });
+                
+                if (participant && participant.id) {
+                    tryIds.push(participant.id);
+                }
+            }
+        } catch (e) {}
+    } else {
+        // В личных сообщениях
+        tryIds.push(senderId);
+        if (message.key?.remoteJid) tryIds.push(message.key.remoteJid);
+    }
+    
+    // Пробуем получить аватарку для каждого ID
+    for (const idTry of tryIds) {
+        if (!idTry) continue;
+        
+        try {
+            console.log(`[quote] Trying to get avatar for: ${idTry}`);
             avatar = await sock.profilePictureUrl(idTry, 'image');
-            if (avatar) break;
+            if (avatar) {
+                console.log(`[quote] Avatar found for: ${idTry}`);
+                break;
+            }
         } catch (e) {
-            // continue to next
+            // Продолжаем пробовать следующий ID
         }
     }
-    if (!avatar) avatar = 'https://www.clipartmax.com/png/full/245-2459068_marco-martinangeli-coiffeur-portrait-of-a-man.png';
+    
+    // Fallback аватарка
+    if (!avatar) {
+        avatar = 'https://www.clipartmax.com/png/full/245-2459068_marco-martinangeli-coiffeur-portrait-of-a-man.png';
+        console.log('[quote] Using default avatar');
+    }
 
     const payload = {
         type: 'q',
