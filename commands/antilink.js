@@ -10,11 +10,16 @@ async function handleAntilinkCommand(sock, chatId, userMessage, senderId, isSend
         }
 
         const prefix = '.';
-        const args = userMessage.slice(9).toLowerCase().trim().split(' ');
+        const command = userMessage.split(' ')[0]; // Получаем команду (например, ".антиссылка" или ".antilink")
+        
+        // Определяем сколько символов нужно срезать в зависимости от команды
+        const sliceLength = command === '.антиссылка' ? 11 : 9;
+        
+        const args = userMessage.slice(sliceLength).toLowerCase().trim().split(' ');
         const action = args[0];
 
         if (!action) {
-            const usage = `настройка антиссылки\n\n${prefix}антиссылка вкл\n\n${prefix}антиссылка выкл\n${prefix}antilink set delete | kick | warn`;
+            const usage = `настройка антиссылки\n\n${prefix}антиссылка вкл\n${prefix}антиссылка выкл\n${prefix}антиссылка условие удалять | кикать | предупреждать`;
             await sock.sendMessage(chatId, { text: usage }, { quoted: message });
             return;
         }
@@ -95,7 +100,7 @@ async function handleLinkDetection(sock, chatId, message, userMessage, senderId)
 
     // Обнаружение ссылок на группы WhatsApp
     if (antilinkSetting === 'whatsappGroup') {
-        console.log('Защита от ссылок на группы WhatsApp включена.');
+        console.log('Защита от ссылок на групп WhatsApp включена.');
         if (linkPatterns.whatsappGroup.test(userMessage)) {
             console.log('Обнаружена ссылка на группу WhatsApp!');
             shouldDelete = true;
