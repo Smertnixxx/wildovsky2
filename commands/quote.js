@@ -23,12 +23,15 @@ async function quoteCommand(sock, chatId, message, text) {
         return;
     }
 
+    // determine sender JID (prefer the quoted participant when replying)
     let senderId = ctx?.participant
         ? ctx.participant
-        : message.key.participant || message.key.remoteJid;
+        : (message.key.participant || message.key.remoteJid || '');
 
-    if (senderId.endsWith('@lid')) {
-        senderId = ctx?.participant || message.key.remoteJid;
+    // Normalize senderId: sometimes it's provided without domain (only digits).
+    // Ensure it is a full JID so getDisplayName can resolve the contact properly.
+    if (typeof senderId === 'string' && !senderId.includes('@')) {
+        senderId = `${senderId}@s.whatsapp.net`;
     }
 
     const words = srcText.split(' ');
