@@ -90,7 +90,52 @@ async function quoteCommand(sock, chatId, message, text) {
         debugLines.push(`[quote] calling getDisplayName with jid=${senderId}`);
         const resolved = await getDisplayName(sock, senderId);
         debugLines.push(`[quote] getDisplayName returned: ${resolved || 'null'}`);
-        if (resolved) name = resolved;
+
+        // If resolved looks like a numeric id (no real display name), try fallbacks:
+        const looksNumeric = resolved && String(resolved).replace(/\D/g, '').length === String(resolved).length;
+
+        if (resolved && !looksNumeric) {
+            name = resolved;
+        } else {
+            // 1) Try sock.contacts (may be populated)
+            try {
+                if (sock.contacts && sock.contacts[senderId]) {
+                    const c = sock.contacts[senderId];
+                    if (c.notify) name = c.notify;
+                    else if (c.name) name = c.name;
+                    else if (c.vname) name = c.vname;
+                }
+            } catch (e) {}
+
+            // 2) Try group metadata participants (if in a group)
+            if ((!name || name === 'user' || looksNumeric) && message.key && message.key.remoteJid && message.key.remoteJid.endsWith('@g.us')) {
+                try {
+                    const { getGroupMetadata } = require('../lib/groupCache');
+                    const meta = await getGroupMetadata(sock, message.key.remoteJid).catch(() => null);
+                    if (meta && Array.isArray(meta.participants)) {
+                        const short = senderId.split('@')[0];
+                        const p = meta.participants.find(px => (px.id || '').includes(short));
+                        if (p) {
+                            if (p.notify) name = p.notify;
+                            else if (p.vname) name = p.vname;
+                        }
+                    }
+                } catch (e) {}
+            }
+
+            // 3) Try reading pushName from quoted message context (best-effort)
+            if ((!name || name === 'user' || looksNumeric) && ctx?.quotedMessage) {
+                try {
+                    const quoted = ctx.quotedMessage;
+                    // extendedTextMessage may carry a 'contextInfo' with 'participant' and 'extendedTextMessage'
+                    const pn = message.message?.extendedTextMessage?.contextInfo?.participant || message.key?.participant || '';
+                    if (pn && pn === senderId && message.pushName) name = message.pushName;
+                } catch (e) {}
+            }
+
+            // final fallback: use resolved even if numeric
+            if ((!name || name === 'user') && resolved) name = resolved;
+        }
     } catch (err) {
         debugLines.push(`[quote] getDisplayName error: ${err && err.message ? err.message : String(err)}`);
     }
