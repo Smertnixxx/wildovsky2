@@ -755,26 +755,32 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             }
 
-            case userMessage.startsWith('.антиссылка'):
-                        case userMessage.startsWith('.antilink'): {
-                if (!isGroup) {
-                    await sock.sendMessage(chatId, {
-                        text: 'Эту команду можно использовать только в группах.',
-                    }, { quoted: message });
-                    return;
-                }
-                if (!isBotAdmin) {
-                    await sock.sendMessage(chatId, {
-                        text: 'Дайте бота админку для того чтобы он мог удалять ссылки.',
-                    }, { quoted: message });
-                    return;
-                }
-                const antilinkCmd = getCommand('antilink');
-                if (antilinkCmd?.handleAntilinkCommand) {
-                    await antilinkCmd.handleAntilinkCommand(sock, chatId, userMessage, senderId, isSenderAdmin, message);
-                }
-                break;
-            }
+case userMessage.startsWith('.антиссылка'):
+case userMessage.startsWith('.antilink'): {
+    if (!isGroup) {
+        await sock.sendMessage(chatId, {
+            text: 'Эту команду можно использовать только в группах.',
+        }, { quoted: message });
+        return;
+    }
+    
+    const adminStatus = await isAdmin(sock, chatId, senderId);
+    const isBotAdmin = adminStatus.isBotAdmin;
+    const isSenderAdmin = adminStatus.isSenderAdmin;
+    
+    if (!isBotAdmin) {
+        await sock.sendMessage(chatId, {
+            text: 'Дайте бота админку для того чтобы он мог удалять ссылки.',
+        }, { quoted: message });
+        return;
+    }
+    
+    const antilinkCmd = getCommand('antilink');
+    if (antilinkCmd?.handleAntilinkCommand) {
+        await antilinkCmd.handleAntilinkCommand(sock, chatId, userMessage, senderId, isSenderAdmin, message);
+    }
+    break;
+}
 
             case userMessage.startsWith('.antitag'): {
                 if (!isGroup) {
