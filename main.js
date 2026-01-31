@@ -737,7 +737,9 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 if (botinfoCommand) await botinfoCommand(sock, chatId, senderId, message);
                 break;
             }
-
+             case userMessage.startsWith('.все'):
+            case userMessage.startsWith('#вызов'):
+            case userMessage.startsWith('#все'):
             case userMessage.startsWith('.вызов'): {
                 // Delegate to existing 'tag' command (no separate file needed)
                 const messageText = rawText.split(' ').slice(1).join(' ').trim(); // text after command
