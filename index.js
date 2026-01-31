@@ -58,19 +58,10 @@ setInterval(() => {
     }
 }, 60_000) // каждую минуту
 
-// Мониторинг памяти - перезапуск при высоком использовании RAM
-setInterval(() => {
-    const used = process.memoryUsage().rss / 1024 / 1024
-    if (used > 400) {
-        console.log('⚠️ RAM слишком высок (>400MB), перезапуск бота...')
-        process.exit(1) // Панель автоматически перезапустит
-    }
-}, 30_000) // проверка каждые 30 секунд
-
-let phoneNumber = "911234567890"
+let phoneNumber = "79292991077"
 let owner = JSON.parse(fs.readFileSync('./data/owner.json'))
 
-global.botname = "KNIGHT BOT"
+global.botname = "wildovsky"
 global.themeemoji = "•"
 const pairingCode = !!phoneNumber || process.argv.includes("--pairing-code")
 const useMobile = process.argv.includes("--mobile")

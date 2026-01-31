@@ -31,7 +31,7 @@ async function stickerCommand(sock, chatId, message) {
 
     if (!mediaMessage) {
         await sock.sendMessage(chatId, { 
-            text: 'Please reply to an image/video with .sticker, or send an image/video with .sticker as the caption.',
+            text: 'Ответьте на сообщение с картинкой которое вы хотите сделать стикером',
         },{ quoted: messageToQuote });
         return;
     }
@@ -44,7 +44,7 @@ async function stickerCommand(sock, chatId, message) {
 
         if (!mediaBuffer) {
             await sock.sendMessage(chatId, { 
-                text: 'Failed to download media. Please try again.',
+                text: 'не получилось, попробуйте еще раз.',
             });
             return;
         }
@@ -141,7 +141,7 @@ async function stickerCommand(sock, chatId, message) {
         // Create metadata
         const json = {
             'sticker-pack-id': crypto.randomBytes(32).toString('hex'),
-            'sticker-pack-name': `это твой стикер солнышко <3 ${senderName}`,
+            'sticker-pack-name': `привет`,
             'emojis': ['🦆']
         };
 
