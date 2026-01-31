@@ -147,12 +147,38 @@ async function quoteCommand(sock, chatId, message, text) {
         // ignore send errors
     }
 
+    // Try multiple ways to fetch avatar: prefer senderId but fallback to other participant identifiers
     let avatar;
-    try {
-        avatar = await sock.profilePictureUrl(senderId, 'image');
-    } catch {
-        avatar = 'https://www.clipartmax.com/png/full/245-2459068_marco-martinangeli-coiffeur-portrait-of-a-man.png';
+    const tryIds = [];
+    if (senderId) tryIds.push(senderId);
+    if (ctx?.participant) {
+        let p = ctx.participant;
+        if (p.endsWith('@lid')) p = p.replace(/@lid$/, '@s.whatsapp.net');
+        if (!p.includes('@')) p = `${p}@s.whatsapp.net`;
+        tryIds.push(p);
     }
+    if (message.key?.participant) {
+        let p = message.key.participant;
+        if (p.endsWith('@lid')) p = p.replace(/@lid$/, '@s.whatsapp.net');
+        if (!p.includes('@')) p = `${p}@s.whatsapp.net`;
+        tryIds.push(p);
+    }
+    if (message.key?.remoteJid && message.key.remoteJid.endsWith('@g.us') && ctx?.participant) {
+        // as a last resort, try participant id combined with group domain
+        const short = ctx.participant.split('@')[0];
+        tryIds.push(`${short}@s.whatsapp.net`);
+    }
+
+    avatar = null;
+    for (const idTry of tryIds) {
+        try {
+            avatar = await sock.profilePictureUrl(idTry, 'image');
+            if (avatar) break;
+        } catch (e) {
+            // continue to next
+        }
+    }
+    if (!avatar) avatar = 'https://www.clipartmax.com/png/full/245-2459068_marco-martinangeli-coiffeur-portrait-of-a-man.png';
 
     const payload = {
         type: 'q',
