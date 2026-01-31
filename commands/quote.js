@@ -64,12 +64,38 @@ async function quoteCommand(sock, chatId, message, text) {
 
     if (line.trim()) formatted += line.trim();
 
+    // Collect debugging info and send it as a chat message (instead of console)
+    const debugLines = [];
+    debugLines.push(`[quote] ctx participant: ${ctx?.participant || 'null'}`);
+    debugLines.push(`[quote] message.key participant: ${message.key?.participant || 'null'} remoteJid: ${message.key?.remoteJid || 'null'}`);
+    debugLines.push(`[quote] derived senderId: ${senderId || 'null'}`);
+    debugLines.push(`[quote] sock.contacts available count: ${sock.contacts ? Object.keys(sock.contacts).length : 0}`);
+    if (sock.contacts && sock.contacts[senderId]) {
+        try {
+            const contactStr = JSON.stringify(sock.contacts[senderId]);
+            debugLines.push(`[quote] contact entry for senderId: ${contactStr.length > 800 ? contactStr.slice(0, 800) + '... (truncated)' : contactStr}`);
+        } catch {
+            debugLines.push('[quote] contact entry for senderId: [unserializable]');
+        }
+    }
+
     let name = 'user';
     try {
         const getDisplayName = require('../lib/getDisplayName');
+        debugLines.push(`[quote] calling getDisplayName with jid=${senderId}`);
         const resolved = await getDisplayName(sock, senderId);
+        debugLines.push(`[quote] getDisplayName returned: ${resolved || 'null'}`);
         if (resolved) name = resolved;
-    } catch {}
+    } catch (err) {
+        debugLines.push(`[quote] getDisplayName error: ${err && err.message ? err.message : String(err)}`);
+    }
+
+    // Send debug info to the chat (quoted to the original message)
+    try {
+        await sock.sendMessage(chatId, { text: debugLines.join('\n') }, { quoted: message });
+    } catch (e) {
+        // ignore send errors
+    }
 
     let avatar;
     try {
