@@ -84,7 +84,7 @@ async function quoteCommand(sock, chatId, message, text) {
     if (line.trim()) formatted += line.trim();
 
     // ============================================
-    // 🔧 ИСПРАВЛЕНИЕ: Правильное получение имени
+    // 🔧 ИСПРАВЛЕНИЕ: Правильное получение имени QUOTED USER
     // ============================================
     let name = 'user';
     
@@ -117,13 +117,28 @@ async function quoteCommand(sock, chatId, message, text) {
             }
         }
         
-        // 2) Если не нашли в метаданных группы, пробуем pushName из сообщения
-        if (name === 'user' && message.pushName) {
-            name = message.pushName;
-            console.log(`[quote] Using pushName: ${name}`);
+        // 2) ИСПРАВЛЕНИЕ: Пробуем получить pushName из QUOTED сообщения (НЕ из текущего)
+        if (name === 'user' && ctx?.quotedMessage) {
+            // Ищем pushName в контексте quoted сообщения
+            // Структура может быть разной, пробуем все варианты
+            const quotedPushName = ctx.pushName || 
+                                   ctx.quotedMessage?.pushName ||
+                                   message.message?.extendedTextMessage?.contextInfo?.pushName;
+            
+            if (quotedPushName) {
+                name = quotedPushName;
+                console.log(`[quote] Using quoted message pushName: ${name}`);
+            }
         }
         
-        // 3) Пробуем getDisplayName как fallback
+        // 3) Если всё ещё не нашли и это НЕ quoted сообщение, используем pushName текущего отправителя
+        // (это для случая когда пишут .quote <текст> без reply)
+        if (name === 'user' && !ctx?.quotedMessage && message.pushName) {
+            name = message.pushName;
+            console.log(`[quote] Using current message pushName: ${name}`);
+        }
+        
+        // 4) Пробуем getDisplayName как fallback
         if (name === 'user') {
             const getDisplayName = require('../lib/getDisplayName');
             const resolved = await getDisplayName(sock, senderId).catch(() => null);
@@ -133,7 +148,7 @@ async function quoteCommand(sock, chatId, message, text) {
             }
         }
         
-        // 4) Проверяем sock.contacts
+        // 5) Проверяем sock.contacts
         if (name === 'user' && sock.contacts && sock.contacts[senderId]) {
             const c = sock.contacts[senderId];
             name = c.notify || c.name || c.vname || name;
