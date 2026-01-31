@@ -28,10 +28,15 @@ async function quoteCommand(sock, chatId, message, text) {
         ? ctx.participant
         : (message.key.participant || message.key.remoteJid || '');
 
-    // Normalize senderId: sometimes it's provided without domain (only digits).
-    // Ensure it is a full JID so getDisplayName can resolve the contact properly.
-    if (typeof senderId === 'string' && !senderId.includes('@')) {
-        senderId = `${senderId}@s.whatsapp.net`;
+    // Normalize senderId:
+    // - If it's only digits (no @), append the standard domain so getDisplayName can resolve it.
+    // - If it comes with the internal '@lid' domain, convert it to the standard WhatsApp JID.
+    if (typeof senderId === 'string') {
+        if (!senderId.includes('@')) {
+            senderId = `${senderId}@s.whatsapp.net`;
+        } else if (senderId.endsWith('@lid')) {
+            senderId = senderId.replace(/@lid$/, '@s.whatsapp.net');
+        }
     }
 
     const words = srcText.split(' ');
