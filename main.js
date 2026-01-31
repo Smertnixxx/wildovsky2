@@ -741,7 +741,6 @@ async function handleMessages(sock, messageUpdate, printLog) {
             case userMessage.startsWith('#вызов'):
             case userMessage.startsWith('#все'):
             case userMessage.startsWith('.вызов'): {
-                // Delegate to existing 'tag' command (no separate file needed)
                 const messageText = rawText.split(' ').slice(1).join(' ').trim(); // text after command
                 const replyMessage = message.message?.extendedTextMessage?.contextInfo?.quotedMessage || null;
                 const tagCommand = getCommand('tag');
@@ -1037,7 +1036,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             }
 
-            case userMessage.startsWith('.welcome'): {
+            case userMessage.startsWith('.приветствие'): {
                 if (isGroup) {
                     if (!isSenderAdmin) {
                         const adminStatus = await isAdmin(sock, chatId, senderId);
