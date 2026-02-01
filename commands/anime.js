@@ -4,7 +4,7 @@ const GIFBufferToVideoBuffer = _gifMod && _gifMod.default ? _gifMod.default : _g
 
 const ANIMU_API = 'https://api.waifu.pics/sfw';
 
-const REACTION_TYPES = {
+const reactionstype = {
     'обнять': { endpoint: 'hug', text: 'обнял(а)' },
     'облизнуть': { endpoint: 'lick', text: 'облизнул(а)' },
     'погладить': { endpoint: 'pat', text: 'погладил(а)' },
@@ -61,14 +61,14 @@ async function animeCommand(sock, chatId, message, args) {
         const command = args[0]?.toLowerCase();
         
         if (!command) {
-            const availableCommands = Object.keys(REACTION_TYPES).join(', ');
+            const availableCommands = Object.keys(reactionstype).join(', ');
             await sock.sendMessage(chatId, {
                 text: `ляляляляля`,
             }, { quoted: message });
             return;
         }
 
-        const reaction = REACTION_TYPES[command];
+        const reaction = reactionstype[command];
         if (!reaction) {
             await sock.sendMessage(chatId, {
                 text: `не корректная команда: ${command}`,

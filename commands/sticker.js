@@ -1,21 +1,49 @@
+// commands/sticker.js
 const { downloadMediaMessage } = require('@whiskeysockets/baileys');
 const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const settings = require('../settings');
 const webp = require('node-webpmux');
 const crypto = require('crypto');
 
-async function stickerCommand(sock, chatId, message) {
-    // The message that will be quoted in the reply.
-    const messageToQuote = message;
-    
-    // The message object that contains the media to be downloaded.
-    let targetMessage = message;
+// Получение имени через store в памяти + groupMetadata как запас
+async function getStickerName(sock, chatId, senderId) {
+    // 1. Из store в памяти по @lid
+    const store = require('../lib/lightweight_store');
+    const c = store.contacts?.[senderId];
+    if (c?.name && !/^\d+$/.test(c.name)) return c.name;
 
-    // If the message is a reply, the target media is in the quoted message.
+    // 2. Через sock.getName
+    try {
+        const name = await sock.getName(senderId);
+        if (name && !/^\+?\d+$/.test(name)) return name;
+    } catch (e) {}
+
+    // 3. Если группа — берём phoneNumber из participants и ищем по нему в store
+    if (chatId.endsWith('@g.us')) {
+        try {
+            const meta = await sock.groupMetadata(chatId);
+            const participant = meta?.participants?.find(p => p.id === senderId);
+            if (participant?.phoneNumber) {
+                const c2 = store.contacts?.[participant.phoneNumber];
+                if (c2?.name && !/^\d+$/.test(c2.name)) return c2.name;
+
+                // 4. sock.getName по phoneNumber
+                try {
+                    const name = await sock.getName(participant.phoneNumber);
+                    if (name && !/^\+?\d+$/.test(name)) return name;
+                } catch (e) {}
+            }
+        } catch (e) {}
+    }
+
+    return null;
+}
+
+async function stickerCommand(sock, chatId, message) {
+    const messageToQuote = message;
+    let targetMessage = message;
     if (message.message?.extendedTextMessage?.contextInfo?.quotedMessage) {
-        // We need to build a new message object for downloadMediaMessage to work correctly.
         const quotedInfo = message.message.extendedTextMessage.contextInfo;
         targetMessage = {
             key: {
@@ -27,92 +55,56 @@ async function stickerCommand(sock, chatId, message) {
         };
     }
 
+    const senderId = (message?.key?.participant || message?.key?.remoteJid) || '';
+    const name = await getStickerName(sock, chatId, senderId) || 'wildovsky';
+
     const mediaMessage = targetMessage.message?.imageMessage || targetMessage.message?.videoMessage || targetMessage.message?.documentMessage;
 
     if (!mediaMessage) {
-        await sock.sendMessage(chatId, { 
-            text: 'Ответьте на сообщение с картинкой которое вы хотите сделать стикером',
-        },{ quoted: messageToQuote });
+        await sock.sendMessage(chatId, {
+            text: 'Ответь на сообщение чтобы сделать стикер или сам напиши\nПример: .quote (сообщение)',
+        }, { quoted: messageToQuote });
         return;
     }
 
     try {
-        const mediaBuffer = await downloadMediaMessage(targetMessage, 'buffer', {}, { 
-            logger: undefined, 
-            reuploadRequest: sock.updateMediaMessage 
+        const mediaBuffer = await downloadMediaMessage(targetMessage, 'buffer', {}, {
+            logger: undefined,
+            reuploadRequest: sock.updateMediaMessage
         });
 
         if (!mediaBuffer) {
-            await sock.sendMessage(chatId, { 
-                text: 'не получилось, попробуйте еще раз.',
-            });
+            await sock.sendMessage(chatId, { text: 'Failed to download media. Please try again.' });
             return;
         }
 
-        // Create temp directory if it doesn't exist
         const tmpDir = path.join(process.cwd(), 'tmp');
-        if (!fs.existsSync(tmpDir)) {
-            fs.mkdirSync(tmpDir, { recursive: true });
-        }
+        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
 
-        // Generate temp file paths
         const tempInput = path.join(tmpDir, `temp_${Date.now()}`);
         const tempOutput = path.join(tmpDir, `sticker_${Date.now()}.webp`);
 
-        // Write media to temp file
         fs.writeFileSync(tempInput, mediaBuffer);
 
-        // Check if media is animated (GIF or video)
-        const isAnimated = mediaMessage.mimetype?.includes('gif') || 
-                          mediaMessage.mimetype?.includes('video') || 
+        const isAnimated = mediaMessage.mimetype?.includes('gif') ||
+                          mediaMessage.mimetype?.includes('video') ||
                           mediaMessage.seconds > 0;
 
-        // Convert to WebP using ffmpeg with optimized settings for animated/non-animated
         const ffmpegCommand = isAnimated
             ? `ffmpeg -i "${tempInput}" -vf "scale=512:512:force_original_aspect_ratio=decrease,fps=15,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000" -c:v libwebp -preset default -loop 0 -vsync 0 -pix_fmt yuva420p -quality 75 -compression_level 6 "${tempOutput}"`
             : `ffmpeg -i "${tempInput}" -vf "scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000" -c:v libwebp -preset default -loop 0 -vsync 0 -pix_fmt yuva420p -quality 75 -compression_level 6 "${tempOutput}"`;
 
         await new Promise((resolve, reject) => {
-            exec(ffmpegCommand, (error) => {
-                if (error) {
-                    console.error('FFmpeg error:', error);
-                    reject(error);
-                } else resolve();
-            });
+            exec(ffmpegCommand, (error) => error ? reject(error) : resolve());
         });
 
-        // Read the WebP file
         let webpBuffer = fs.readFileSync(tempOutput);
 
-        // If animated and output is too large, re-encode with harsher settings similar to stickercrop
+        // Сжатие если анимация слишком большая
         if (isAnimated && webpBuffer.length > 1000 * 1024) {
             try {
                 const tempOutput2 = path.join(tmpDir, `sticker_fallback_${Date.now()}.webp`);
-                // Detect large source to decide compression level
-                const fileSizeKB = mediaBuffer.length / 1024;
-                const isLargeFile = fileSizeKB > 5000; // 5MB
-                const fallbackCmd = isLargeFile
-                    ? `ffmpeg -y -i "${tempInput}" -t 2 -vf "scale=512:512:force_original_aspect_ratio=decrease,fps=8,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000" -c:v libwebp -preset default -loop 0 -vsync 0 -pix_fmt yuva420p -quality 30 -compression_level 6 -b:v 100k -max_muxing_queue_size 1024 "${tempOutput2}"`
-                    : `ffmpeg -y -i "${tempInput}" -t 3 -vf "scale=512:512:force_original_aspect_ratio=decrease,fps=12,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000" -c:v libwebp -preset default -loop 0 -vsync 0 -pix_fmt yuva420p -quality 45 -compression_level 6 -b:v 150k -max_muxing_queue_size 1024 "${tempOutput2}"`;
-                await new Promise((resolve, reject) => {
-                    exec(fallbackCmd, (error) => error ? reject(error) : resolve());
-                });
-                if (fs.existsSync(tempOutput2)) {
-                    webpBuffer = fs.readFileSync(tempOutput2);
-                    try { fs.unlinkSync(tempOutput2); } catch {}
-                }
-            } catch {}
-        }
-        // Read the WebP file
-        webpBuffer = fs.readFileSync(tempOutput);
-
-        // If animated and output is too large, re-encode with harsher settings similar to stickercrop
-        if (isAnimated && webpBuffer.length > 1000 * 1024) {
-            try {
-                const tempOutput2 = path.join(tmpDir, `sticker_fallback_${Date.now()}.webp`);
-                // Detect large source to decide compression level
-                const fileSizeKB = mediaBuffer.length / 1024;
-                const isLargeFile = fileSizeKB > 5000; // 5MB
+                const isLargeFile = mediaBuffer.length / 1024 > 5000;
                 const fallbackCmd = isLargeFile
                     ? `ffmpeg -y -i "${tempInput}" -t 2 -vf "scale=512:512:force_original_aspect_ratio=decrease,fps=8,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000" -c:v libwebp -preset default -loop 0 -vsync 0 -pix_fmt yuva420p -quality 30 -compression_level 6 -b:v 100k -max_muxing_queue_size 1024 "${tempOutput2}"`
                     : `ffmpeg -y -i "${tempInput}" -t 3 -vf "scale=512:512:force_original_aspect_ratio=decrease,fps=12,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000" -c:v libwebp -preset default -loop 0 -vsync 0 -pix_fmt yuva420p -quality 45 -compression_level 6 -b:v 150k -max_muxing_queue_size 1024 "${tempOutput2}"`;
@@ -126,38 +118,25 @@ async function stickerCommand(sock, chatId, message) {
             } catch {}
         }
 
-        // Add metadata using webpmux
+        // Добавляем exif метаданные
         const img = new webp.Image();
         await img.load(webpBuffer);
-    const senderId = (message && message.key && (message.key.participant || message.key.remoteJid)) || '';
-    // resolve friendly display name
-    const getDisplayName = require('../lib/getDisplayName');
-    let senderName = 'user';
-    try {
-        const resolved = await getDisplayName(sock, senderId);
-        if (resolved) senderName = resolved;
-    } catch (e) {}
 
-        // Create metadata
         const json = {
             'sticker-pack-id': crypto.randomBytes(32).toString('hex'),
-            'sticker-pack-name': `привет`,
+            'sticker-pack-name': name,
             'emojis': ['🦆']
         };
 
-        // Create exif buffer
         const exifAttr = Buffer.from([0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x41, 0x57, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00]);
         const jsonBuffer = Buffer.from(JSON.stringify(json), 'utf8');
         const exif = Buffer.concat([exifAttr, jsonBuffer]);
         exif.writeUIntLE(jsonBuffer.length, 14, 4);
-
-        // Set the exif data
         img.exif = exif;
 
-        // Get the final buffer with metadata
         let finalBuffer = await img.save(null);
 
-        // Final safety: if still too large, make a tiny 320/256px pass
+        // Финальное сжатие если всё ещё слишком большой
         if (isAnimated && finalBuffer.length > 900 * 1024) {
             try {
                 const tempOutput3 = path.join(tmpDir, `sticker_small_${Date.now()}.webp`);
@@ -171,7 +150,7 @@ async function stickerCommand(sock, chatId, message) {
                     await img2.load(smallWebp);
                     const json2 = {
                         'sticker-pack-id': crypto.randomBytes(32).toString('hex'),
-                        'sticker-pack-name': settings.packname || 'KnightBot',
+                        'sticker-pack-name': name,
                         'emojis': ['🤖']
                     };
                     const exifAttr2 = Buffer.from([0x49, 0x49, 0x2A, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x41, 0x57, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0x00, 0x00, 0x00]);
@@ -185,24 +164,17 @@ async function stickerCommand(sock, chatId, message) {
             } catch {}
         }
 
-        // Send the sticker
-        await sock.sendMessage(chatId, { 
-            sticker: finalBuffer
-        },{ quoted: messageToQuote });
+        await sock.sendMessage(chatId, { sticker: finalBuffer }, { quoted: messageToQuote });
 
-        // Cleanup temp files
+        // Cleanup
         try {
             fs.unlinkSync(tempInput);
             fs.unlinkSync(tempOutput);
-        } catch (err) {
-            console.error('Error cleaning up temp files:', err);
-        }
+        } catch {}
 
     } catch (error) {
         console.error('Error in sticker command:', error);
-        await sock.sendMessage(chatId, { 
-            text: 'Failed to create sticker! Try again later.',
-        });
+        await sock.sendMessage(chatId, { text: 'Failed to create sticker! Try again later.' });
     }
 }
 

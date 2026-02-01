@@ -13,9 +13,6 @@ async function quoteCommand(sock, chatId, message, text) {
     if (!srcText && ctx?.quotedMessage?.conversation) {
         srcText = ctx.quotedMessage.conversation;
     }
-    if (!srcText && ctx?.quotedMessage?.extendedTextMessage?.text) {
-        srcText = ctx.quotedMessage.extendedTextMessage.text;
-    }
 
     if (!srcText) {
         await sock.sendMessage(
@@ -26,32 +23,14 @@ async function quoteCommand(sock, chatId, message, text) {
         return;
     }
 
-    // ============================================
-    // 🔧 ИСПРАВЛЕНИЕ: Правильное получение senderId
-    // ============================================
-    let senderId;
-    let senderLid; // Сохраняем оригинальный LID для получения имени
-    
-    // В группах используем participant из quoted message или из ключа сообщения
-    if (chatId.endsWith('@g.us')) {
-        // Приоритет: quoted participant > message participant
-        senderId = ctx?.participant || message.key?.participant || message.key?.remoteJid;
-        senderLid = senderId; // Сохраняем оригинальный LID
-        
-        // Конвертируем @lid в @s.whatsapp.net для получения аватарки
-        if (senderId && senderId.endsWith('@lid')) {
-            const lidNumber = senderId.split('@')[0];
-            senderId = `${lidNumber}@s.whatsapp.net`;
-        }
-    } else {
-        // В личных сообщениях
-        senderId = message.key?.remoteJid || message.key?.participant || '';
-    }
+    let senderId = ctx?.participant
+        ? ctx.participant
+        : message.key.participant || message.key.remoteJid;
 
-    // Нормализация senderId
-    if (typeof senderId === 'string' && !senderId.includes('@')) {
-        senderId = `${senderId}@s.whatsapp.net`;
-    }
+if (senderId.endsWith('@lid')) {
+    senderId = senderId.split('@')[0] + '@s.whatsapp.net';
+}
+
 
     const words = srcText.split(' ');
     const maxWords = 5;
@@ -83,140 +62,18 @@ async function quoteCommand(sock, chatId, message, text) {
 
     if (line.trim()) formatted += line.trim();
 
-    // ============================================
-    // 🔧 ИСПРАВЛЕНИЕ: Правильное получение имени QUOTED USER
-    // ============================================
     let name = 'user';
-    
     try {
-        // 1) Сначала пробуем получить имя из метаданных группы (САМЫЙ НАДЁЖНЫЙ СПОСОБ)
-        if (chatId.endsWith('@g.us')) {
-            try {
-                const groupMeta = await sock.groupMetadata(chatId).catch(() => null);
-                if (groupMeta && groupMeta.participants) {
-                    // Ищем участника по LID (оригинальному идентификатору)
-                    const participant = groupMeta.participants.find(p => {
-                        const pId = p.id || '';
-                        const pLid = p.lid || '';
-                        
-                        // Сравниваем и с обычным id и с lid
-                        return pId === senderLid || 
-                               pId === senderId || 
-                               pLid === senderLid ||
-                               pId.split('@')[0] === (senderLid || '').split('@')[0];
-                    });
-                    
-                    if (participant) {
-                        // Приоритет: notify (пушнейм) > vname (имя в контактах) > имя из профиля
-                        name = participant.notify || participant.vname || participant.name || name;
-                        console.log(`[quote] Found name from group metadata: ${name}`);
-                    }
-                }
-            } catch (e) {
-                console.error('[quote] Error getting group metadata:', e);
-            }
-        }
-        
-        // 2) ИСПРАВЛЕНИЕ: Пробуем получить pushName из QUOTED сообщения (НЕ из текущего)
-        if (name === 'user' && ctx?.quotedMessage) {
-            // Ищем pushName в контексте quoted сообщения
-            // Структура может быть разной, пробуем все варианты
-            const quotedPushName = ctx.pushName || 
-                                   ctx.quotedMessage?.pushName ||
-                                   message.message?.extendedTextMessage?.contextInfo?.pushName;
-            
-            if (quotedPushName) {
-                name = quotedPushName;
-                console.log(`[quote] Using quoted message pushName: ${name}`);
-            }
-        }
-        
-        // 3) Если всё ещё не нашли и это НЕ quoted сообщение, используем pushName текущего отправителя
-        // (это для случая когда пишут .quote <текст> без reply)
-        if (name === 'user' && !ctx?.quotedMessage && message.pushName) {
-            name = message.pushName;
-            console.log(`[quote] Using current message pushName: ${name}`);
-        }
-        
-        // 4) Пробуем getDisplayName как fallback
-        if (name === 'user') {
-            const getDisplayName = require('../lib/getDisplayName');
-            const resolved = await getDisplayName(sock, senderId).catch(() => null);
-            if (resolved && String(resolved).replace(/\D/g, '').length !== String(resolved).length) {
-                name = resolved;
-                console.log(`[quote] Using getDisplayName: ${name}`);
-            }
-        }
-        
-        // 5) Проверяем sock.contacts
-        if (name === 'user' && sock.contacts && sock.contacts[senderId]) {
-            const c = sock.contacts[senderId];
-            name = c.notify || c.name || c.vname || name;
-            console.log(`[quote] Using sock.contacts: ${name}`);
-        }
-        
-    } catch (err) {
-        console.error('[quote] Error getting name:', err);
-    }
+        const getDisplayName = require('../lib/getDisplayName');
+        const resolved = await getDisplayName(sock, senderId);
+        if (resolved) name = resolved;
+    } catch {}
 
-    // ============================================
-    // 🔧 ИСПРАВЛЕНИЕ: Правильное получение аватарки
-    // ============================================
-    let avatar = null;
-    
-    // Пробуем разные варианты ID для получения аватарки
-    const tryIds = [];
-    
-    // В группах: сначала пробуем оригинальный participant (может быть @lid)
-    if (chatId.endsWith('@g.us')) {
-        if (ctx?.participant) tryIds.push(ctx.participant);
-        if (message.key?.participant) tryIds.push(message.key.participant);
-        
-        // Конвертированные версии
-        if (senderId) tryIds.push(senderId);
-        
-        // Пробуем получить из метаданных группы
-        try {
-            const groupMeta = await sock.groupMetadata(chatId).catch(() => null);
-            if (groupMeta && groupMeta.participants) {
-                const participant = groupMeta.participants.find(p => {
-                    const pId = p.id || '';
-                    return pId === senderLid || 
-                           pId === senderId || 
-                           pId.split('@')[0] === (senderLid || '').split('@')[0];
-                });
-                
-                if (participant && participant.id) {
-                    tryIds.push(participant.id);
-                }
-            }
-        } catch (e) {}
-    } else {
-        // В личных сообщениях
-        tryIds.push(senderId);
-        if (message.key?.remoteJid) tryIds.push(message.key.remoteJid);
-    }
-    
-    // Пробуем получить аватарку для каждого ID
-    for (const idTry of tryIds) {
-        if (!idTry) continue;
-        
-        try {
-            console.log(`[quote] Trying to get avatar for: ${idTry}`);
-            avatar = await sock.profilePictureUrl(idTry, 'image');
-            if (avatar) {
-                console.log(`[quote] Avatar found for: ${idTry}`);
-                break;
-            }
-        } catch (e) {
-            // Продолжаем пробовать следующий ID
-        }
-    }
-    
-    // Fallback аватарка
-    if (!avatar) {
+    let avatar;
+    try {
+        avatar = await sock.profilePictureUrl(senderId, 'image');
+    } catch {
         avatar = 'https://www.clipartmax.com/png/full/245-2459068_marco-martinangeli-coiffeur-portrait-of-a-man.png';
-        console.log('[quote] Using default avatar');
     }
 
     const payload = {

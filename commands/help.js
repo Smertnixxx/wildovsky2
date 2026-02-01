@@ -1,13 +1,13 @@
-const settings = require('../settings');
-const fs = require('fs');
-const path = require('path');
+// commands/help.js
+const getDisplayName = require('../lib/getDisplayName');
 
 async function helpCommand(sock, chatId, message) {
+
     const senderId = (message && message.key && (message.key.participant || message.key.remoteJid)) || '';
-    const senderShort = senderId ? senderId.split('@')[0] : 'user';
+    const name = await getDisplayName(sock, senderId);
 
     const helpMessage = `
-привет @${senderShort} как дела?
+привет ${name}, как дела?
 
 Доступные команды:
 
@@ -22,13 +22,17 @@ async function helpCommand(sock, chatId, message) {
 > .повысить
 > .понизить
 
+⚙️ Разное
 > .разработчик
 > .пинг
-> .стикер
 > .ttt
 > .инфогруппа
 > .кик
 
+🔃 Преобразование
+> .стикер
+> .ptv
+> .tts 
 
 *Аниме команды*
 > .обнять
@@ -41,21 +45,15 @@ async function helpCommand(sock, chatId, message) {
 
 Если еще нужны будут команды обращайтесь wa.me/79292991077
 предлагайте идеи что можно добавить
-
 `;
 
     try {
-
         await sock.sendMessage(chatId, {
-            text: helpMessage,
-            mentions: senderId ? [senderId] : [],
+            text: helpMessage
         }, { quoted: message });
     } catch (error) {
         console.error('Error in help command:', error);
-        await sock.sendMessage(chatId, {
-            text: helpMessage,
-            mentions: senderId ? [senderId] : [],
-        });
+        await sock.sendMessage(chatId, { text: helpMessage });
     }
 }
 

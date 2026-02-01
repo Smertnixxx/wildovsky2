@@ -133,7 +133,7 @@ console.log(chalk.green(`✅ Загружено ${commandCache.size} коман�
 global.packname = settings.packname;
 global.author = settings.author;
 global.channelLink = "https://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A";
-global.ytch = "wildovsky";
+global.ytch = "RSecktor";
 
 // Enhanced logging
 function getEkaterinburgTime() {
@@ -713,6 +713,12 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             }
 
+            case userMessage === '.карусель': {
+    const testcarousel = getCommand('testcarousel');
+    if (testcarousel) await testcarousel(sock, chatId, message);
+    break;
+}
+
             case userMessage === '.owner':
             case userMessage.startsWith('.разработчик'): {
                 const ownerCommand = getCommand('owner');
@@ -906,6 +912,15 @@ case userMessage.startsWith('.antilink'): {
                 break;
             }
 
+            case userMessage === '.ptv': {
+    const ptvCmd = getCommand('ptv');
+    if (ptvCmd?.ptvCommand) {
+        await ptvCmd.ptvCommand(sock, chatId, message);
+    }
+    break;
+}
+
+
             case userMessage.startsWith('.compliment'): {
                 const complimentCmd = getCommand('compliment');
                 if (complimentCmd?.complimentCommand) {
@@ -1018,8 +1033,15 @@ case userMessage.startsWith('.antilink'): {
                 break;
             }
 
+
+            case userMessage.startsWith('.сердечко'): {
+                const heartAnimation = getCommand('heartAnimation');
+                if (heartAnimation) await heartAnimation(sock, chatId, message);
+                break;
+            }
+
             case userMessage === '.карусель': {
-                const testcarousel = getCommand('testcarousel');
+            const testcarousel = getCommand('testcarousel');
                 if (testcarousel) await testcarousel(sock, chatId, message);
                 break;
             }
