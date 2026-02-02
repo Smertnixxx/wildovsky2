@@ -74,7 +74,7 @@ async function tagCommand(sock, chatId, senderId, messageText, replyMessage, mes
         await sock.sendMessage(chatId, {
             text: messageText || "всех отметил!",
             mentions: mentionedJidList
-        });
+        }, {quoted: message});
     }
 }
 

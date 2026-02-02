@@ -1032,7 +1032,12 @@ case userMessage.startsWith('.antilink'): {
                 if (pingCommand) await pingCommand(sock, chatId, message);
                 break;
             }
-
+    
+            case userMessage.startsWith('.стата'): {
+                const profileCommand = getCommand('profile');
+                if (profileCommand) await profileCommand(sock, chatId, message);
+                break;
+            }
 
             case userMessage.startsWith('.сердечко'): {
                 const heartAnimation = getCommand('heartAnimation');
@@ -1619,7 +1624,7 @@ case userMessage === '.goodnight':
             case userMessage.startsWith('.happy'):
             case userMessage.startsWith('.highfive'):
             case userMessage.startsWith('.handhold'):
-            // Русские команды:
+            case userMessage.startsWith('.скушать'):
             case userMessage.startsWith('.обнять'):
             case userMessage.startsWith('.облизнуть'):
             case userMessage.startsWith('.погладить'):

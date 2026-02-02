@@ -1,12 +1,12 @@
 const fs = require('fs');
 const path = require('path');
+const getDisplayName = require('../lib/getDisplayName');
 
 const dataFilePath = path.join(__dirname, '..', 'data', 'messageCount.json');
 
 function loadMessageCounts() {
     if (fs.existsSync(dataFilePath)) {
-        const data = fs.readFileSync(dataFilePath);
-        return JSON.parse(data);
+        return JSON.parse(fs.readFileSync(dataFilePath));
     }
     return {};
 }
@@ -31,30 +31,45 @@ function incrementMessageCount(groupId, userId) {
     saveMessageCounts(messageCounts);
 }
 
-function topMembers(sock, chatId, isGroup) {
+async function topMembers(sock, chatId, isGroup) {
     if (!isGroup) {
-        sock.sendMessage(chatId, { text: 'Команда может быть использована только в группах' });
+        await sock.sendMessage(chatId, { text: 'Команда может быть использована только в группах' });
         return;
     }
 
     const messageCounts = loadMessageCounts();
     const groupCounts = messageCounts[chatId] || {};
 
+    const totalMessages = Object.values(groupCounts)
+        .reduce((sum, count) => sum + count, 0);
+
     const sortedMembers = Object.entries(groupCounts)
         .sort(([, a], [, b]) => b - a)
-        .slice(0, 10); // Get top 5 members
+        .slice(0, 10);
 
     if (sortedMembers.length === 0) {
-        sock.sendMessage(chatId, { text: 'Удивительно но сообщений нету.' });
+        await sock.sendMessage(chatId, { text: 'Удивительно но сообщений нету.' });
         return;
     }
 
-    let message = '💬 Таблица лидеров по сообщениям в группе:\n\n';
-    sortedMembers.forEach(([userId, count], index) => {
-        message += `${index + 1}. @${userId.split('@')[0]} - ${count} ✉️\n`;
-    });
+    let message =
+        `💬 Таблица лидеров по сообщениям в группе\n` +
+        `Всего сообщений: ${totalMessages}\n\n`;
 
-    sock.sendMessage(chatId, { text: message, mentions: sortedMembers.map(([userId]) => userId) });
+    for (let i = 0; i < sortedMembers.length; i++) {
+        const [userId, count] = sortedMembers[i];
+
+        let name;
+        try {
+            name = await getDisplayName(sock, userId);
+        } catch {
+            name = userId;
+        }
+
+        message += `${i + 1}. ${name} - ${count} ✉️\n`;
+    }
+
+    await sock.sendMessage(chatId, { text: message });
 }
 
 module.exports = { incrementMessageCount, topMembers };

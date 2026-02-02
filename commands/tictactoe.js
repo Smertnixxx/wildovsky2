@@ -228,9 +228,9 @@ async function handleTicTacToeMove(sock, chatId, senderId, text) {
 
 ${gameStatus}
 
-${arr.slice(0, 3).join('')}
-${arr.slice(3, 6).join('')}
-${arr.slice(6).join('')}
+> ${arr.slice(0, 3).join('')}
+> ${arr.slice(3, 6).join('')}
+> ${arr.slice(6).join('')}
 
 1 Игрок ❎: @${room.game.playerX.split('@')[0]}
 2 Игрок ⭕: @${room.game.playerO.split('@')[0]}

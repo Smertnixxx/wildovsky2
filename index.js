@@ -117,7 +117,42 @@ async function startXeonBotInc() {
         try {
             const mek = chatUpdate.messages[0]
             if (!mek.message) return
+
+            // Нормализуем возможные обёртки (ephemeral/viewOnce/...) в основной message
             mek.message = (Object.keys(mek.message)[0] === 'ephemeralMessage') ? mek.message.ephemeralMessage.message : mek.message
+
+            // Если пришло только senderKeyDistributionMessage — игнорируем (не нужно)
+            if (mek.message && mek.message.senderKeyDistributionMessage && Object.keys(mek.message).length === 1) {
+                return
+            }
+
+            // Обработка нажатий кнопок шаблонов и быстрых кнопок — логирование и нормализация
+            try {
+                const inner = mek.message || {}
+                const template = inner.templateButtonReplyMessage || (inner.ephemeralMessage && inner.ephemeralMessage.templateButtonReplyMessage) || (inner.viewOnceMessage && inner.viewOnceMessage.templateButtonReplyMessage)
+                const buttonsResp = inner.buttonsResponseMessage || (inner.ephemeralMessage && inner.ephemeralMessage.buttonsResponseMessage) || (inner.viewOnceMessage && inner.viewOnceMessage.buttonsResponseMessage)
+
+                if (template) {
+                    const selected = template.selectedId || template.selectedDisplayText || template.selectedButtonId || ''
+                    console.log('--- templateButtonReplyMessage detected ---')
+                    console.log('remoteJid:', mek.key?.remoteJid, 'id:', mek.key?.id, 'participant:', mek.key?.participant)
+                    console.log('selected:', selected)
+                    console.log('Full message object:')
+                    console.log(JSON.stringify(mek, null, 2))
+                    // Подставим выбранный id/текст в conversation, чтобы существующая логика handleMessages увидела команду
+                    mek.message.conversation = String(selected)
+                } else if (buttonsResp) {
+                    const selected = buttonsResp.selectedButtonId || buttonsResp.selectedDisplayText || ''
+                    console.log('--- buttonsResponseMessage detected ---')
+                    console.log('remoteJid:', mek.key?.remoteJid, 'id:', mek.key?.id, 'participant:', mek.key?.participant)
+                    console.log('selected:', selected)
+                    console.log('Full message object:')
+                    console.log(JSON.stringify(mek, null, 2))
+                    mek.message.conversation = String(selected)
+                }
+            } catch (e) {
+                console.error('Error processing template/buttons response:', e)
+            }
             if (mek.key && mek.key.remoteJid === 'status@broadcast') {
                 await handleStatus(XeonBotInc, chatUpdate);
                 return;

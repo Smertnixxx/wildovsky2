@@ -13,7 +13,7 @@ const reactionstype = {
     'укусить': { endpoint: 'bite', text: 'укусил(а)' },
     'поцеловать': { endpoint: 'kiss', text: 'поцеловал(а)' },
     'ударить': { endpoint: 'bonk', text: 'ударил(а)' },
-    'nom': { endpoint: 'nom', text: 'nom nom' },
+    'скушать': { endpoint: 'nom', text: 'скушал(а)' },
     'poke': { endpoint: 'poke', text: 'poked' },
     'cry': { endpoint: 'cry', text: 'is crying' },
     'wink': { endpoint: 'wink', text: 'winked at' },
