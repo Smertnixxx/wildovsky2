@@ -72,9 +72,7 @@ const messages = [
             ['.пинг', '.пинг'] 
         ],
         copy: null,
-        urls: [
-            ['Присоединиться к группе', 'https://chat.whatsapp.com/FAomD7wIT1S8M52POy7xM2']
-        ],
+        urls: null,
         list: [
             ['Команды', sections]
         ]
