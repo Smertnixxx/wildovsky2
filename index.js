@@ -47,6 +47,20 @@ const store = require('./lib/lightweight_store')
 
 // Инициализация хранилища
 store.readFromFile()
+// Load persistent users DB (for features like marriages)
+try {
+    const userDB = require('./lib/userdb');
+    const users = userDB.load() || {};
+    if (!global.db) global.db = { data: { users: {} } };
+    if (!global.db.data) global.db.data = { users: {} };
+    global.db.data.users = users;
+    // Save automatically periodically in case of external changes
+    setInterval(() => {
+        try { userDB.save(global.db.data.users); } catch (e) {}
+    }, 60 * 1000); // every minute
+} catch (e) {
+    console.error('Failed to initialize user DB:', e);
+}
 const settings = require('./settings')
 setInterval(() => store.writeToFile(), settings.storeWriteInterval || 10000)
 
@@ -158,16 +172,33 @@ async function startXeonBotInc() {
                 return;
             }
 
-            // Forward reaction messages to command-specific reaction handlers (e.g., tictactoe)
+            // Forward reaction messages to command-specific reaction handlers (e.g., tictactoe, marriage)
             if (mek.message?.reactionMessage) {
                 try {
-                    const ttt = require('./commands/tictactoe');
                     const reactionMsg = Object.assign({}, mek, { isGroup: (mek.key.remoteJid || '').endsWith('@g.us'), mtype: 'reactionMessage' });
-                    if (typeof ttt.handleReaction === 'function') {
-                        await ttt.handleReaction(reactionMsg, { conn: XeonBotInc });
+
+                    // tictactoe reactions
+                    try {
+                        const ttt = require('./commands/tictactoe');
+                        if (typeof ttt.handleReaction === 'function') {
+                            await ttt.handleReaction(reactionMsg, { conn: XeonBotInc });
+                        }
+                    } catch (e) {
+                        console.error('Error forwarding reaction to tictactoe handler:', e);
                     }
+
+                    // marriage reactions
+                    try {
+                        const marriage = require('./commands/marriage');
+                        if (typeof marriage.handleReaction === 'function') {
+                            await marriage.handleReaction(reactionMsg, { conn: XeonBotInc });
+                        }
+                    } catch (e) {
+                        console.error('Error forwarding reaction to marriage handler:', e);
+                    }
+
                 } catch (e) {
-                    console.error('Error forwarding reaction to tictactoe handler:', e);
+                    console.error('Error processing reaction message forwarding:', e);
                 }
             }
 

@@ -33,11 +33,21 @@ async function profileCommand(sock, chatId, message) {
             }
         }
 
+        // marriage display
+        let marriageLine = '';
+        try {
+            const users = global.db.data.users || {};
+            if (users[senderId] && users[senderId].pasangan) {
+                const partnerJid = users[senderId].pasangan;
+                const partnerName = users[senderId].pasanganName || (await getDisplayName(sock, partnerJid));
+                marriageLine = `\n💞 Брак: ${partnerName}`;
+            }
+        } catch (e) { /* ignore */ }
+
         const profile = `
 Привет ${name} котик
-
 💬 Сообщения: ${userMessages}
-👤 Роль: ${role}
+👤 Роль: ${role}${marriageLine}
         `.trim();
 
         await sock.sendMessage(

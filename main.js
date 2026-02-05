@@ -1228,6 +1228,53 @@ case userMessage.startsWith('.antilink'): {
                 if (shipCommand) await shipCommand(sock, chatId, message);
                 break;
             }
+            
+            case userMessage.startsWith('.marriage_accept'): {
+                if (!isGroup) {
+                    await sock.sendMessage(chatId, { text: 'Эту команду можно использовать только в группах.' }, { quoted: message });
+                    return;
+                }
+                const uidMatch = userMessage.match(/mar\d+/i);
+                const uid = uidMatch ? uidMatch[0] : null;
+                const marriageCmd = getCommand('marriage');
+                if (marriageCmd?.acceptViaButton) await marriageCmd.acceptViaButton(sock, chatId, message, uid);
+                break;
+            }
+
+            case userMessage.startsWith('.marriage_reject'): {
+                if (!isGroup) {
+                    await sock.sendMessage(chatId, { text: 'Эту команду можно использовать только в группах.' }, { quoted: message });
+                    return;
+                }
+                const uidMatchR = userMessage.match(/mar\d+/i);
+                const uidR = uidMatchR ? uidMatchR[0] : null;
+                const marriageCmdR = getCommand('marriage');
+                if (marriageCmdR?.rejectViaButton) await marriageCmdR.rejectViaButton(sock, chatId, message, uidR);
+                break;
+            }
+            case userMessage.startsWith('.брак'):
+            case userMessage.startsWith('.отношения'):
+            case userMessage.startsWith('.marriage'): {
+                if (!isGroup) {
+                    await sock.sendMessage(chatId, { text: 'Эту команду можно использовать только в группах.' }, { quoted: message });
+                    return;
+                }
+                const marriageCmd = getCommand('marriage');
+                if (marriageCmd?.proposeCommand) await marriageCmd.proposeCommand(sock, chatId, message);
+                break;
+            }
+
+            case userMessage.startsWith('.развод'):
+            case userMessage.startsWith('.расстаться'):
+            case userMessage.startsWith('.divorce'): {
+                if (!isGroup) {
+                    await sock.sendMessage(chatId, { text: 'Эту команду можно использовать только в группах.' }, { quoted: message });
+                    return;
+                }
+                const marriageCmd2 = getCommand('marriage');
+                if (marriageCmd2?.divorceCommand) await marriageCmd2.divorceCommand(sock, chatId, message);
+                break;
+            }
 
             case userMessage === '.groupinfo':
             case userMessage === '.инфогруппа':
