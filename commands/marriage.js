@@ -1,14 +1,7 @@
 const getDisplayName = require('../lib/getDisplayName');
 const userDB = require('../lib/userdb');
-const { sendCarousel } = require('../lib/sendCarousel');
-const fs = require('fs');
-const path = require('path');
 
-// Keep pending requests in global so module reloads won't lose state
-if (!global.pendingMarriageRequests) global.pendingMarriageRequests = {};
-if (!global.pendingMarriageByUid) global.pendingMarriageByUid = {};
-let pendingMarriageRequests = global.pendingMarriageRequests;
-let pendingMarriageByUid = global.pendingMarriageByUid;
+let pendingMarriageRequests = {};
 
 const validReactions = [
     '👍', '👍🏻', '👍🏼', '👍🏽', '👍🏾', '👍🏿',
@@ -67,71 +60,29 @@ async function proposeCommand(sock, chatId, message) {
         const text = `
 💍 *Предложение на брак*
 
-> *${await getDisplayName(sock, user)}*, вам отправили предложение на брак от *${senderName}*.`.trim();
+*${await getDisplayName(sock, user)}*, вам отправили предложение на брак от *${senderName}*.
 
-        // prepare image
-        let imgBuffer = null;
-        try {
-            imgBuffer = fs.readFileSync(path.join(process.cwd(), 'assets', 'котик.jpg'));
-        } catch (e) {}
-        const uid = `mar${Date.now()}${Math.floor(Math.random() * 1000)}`;
+Поставьте реакцию на это сообщение чтобы:
+👍 — принять
+👎 — отклонить
+        `.trim();
 
-        const cards = [
-            {
-                text: ``,
-                footer: '',
-                header: ``,
-                imageBuffer: imgBuffer,
-                buttons: [
-                    ['Принять', `.marriage_accept ${uid}`]
-                ]
-            },
-            {
-                text: ``,
-                footer: '',
-                header: ``,
-                imageBuffer: imgBuffer,
-                buttons: [
-                    ['Отклонить', `.marriage_reject ${uid}`]
-                ]
-            }
-        ];
+        const sent = await sock.sendMessage(chatId, { text, contextInfo: { mentionedJid: [user] } }, { quoted: message });
 
-        const msgs = await sendCarousel(sock, chatId, cards, message, {
-            bodyText: text,
-            footerText: 'Выберите действие'
-        });
-
-        const sent = msgs;
-
-        // replace TEMPID placeholders with real message id in pending structure
-        const sentId = sent.key.id;
-
-        const reqObj = {
+        pendingMarriageRequests[sent.key.id] = {
             from: sender,
             to: user,
-            messageObj: sent,
-            uid,
-            expiresAt: Date.now() + 5 * 60 * 1000
+            messageObj: sent
         };
-        pendingMarriageRequests[sentId] = reqObj;
-        pendingMarriageByUid[uid] = reqObj;
-        console.log(`[marriage] created req uid=${uid} messageId=${sentId} from=${sender} to=${user}`);
-
-        // update buttons ids - not editable after sent, but when user clicks selectedButtonId will be the id we set originally.
-        // Unfortunately we had to set TEMPID earlier; however selectedButtonId will include TEMPID, so we'll also accept responses by matching any id containing the sentId.
 
         setTimeout(async () => {
-            const p = pendingMarriageRequests[sentId];
-            if (p) {
+            if (pendingMarriageRequests[sent.key.id]) {
                 try {
                     await sock.sendMessage(chatId, {
                         text: `Заявка на брак от *${senderName}* была отклонена из-за отсутствия ответа.`
-                    }, { quoted: p.messageObj });
+                    }, { quoted: pendingMarriageRequests[sent.key.id].messageObj });
                 } catch (e) {}
-                // remove both mappings
-                delete pendingMarriageRequests[sentId];
-                if (p.uid) delete pendingMarriageByUid[p.uid];
+                delete pendingMarriageRequests[sent.key.id];
             }
         }, 5 * 60 * 1000);
 
@@ -190,7 +141,7 @@ async function handleReaction(m, { conn }) {
         if (!messageID || !pendingMarriageRequests[messageID]) return;
 
         const marriageRequest = pendingMarriageRequests[messageID];
-        const { from, to, messageObj, uid } = marriageRequest;
+        const { from, to, messageObj } = marriageRequest;
 
         const reactor = m.sender || m.key?.participant || m.key?.remoteJid;
         if (reactor === from) return;
@@ -218,81 +169,14 @@ async function handleReaction(m, { conn }) {
             }, { quoted: messageObj });
         }
 
-        // delete both mappings if exist
         delete pendingMarriageRequests[messageID];
-        if (uid && pendingMarriageByUid[uid]) delete pendingMarriageByUid[uid];
     } catch (e) {
         console.error('handleReaction error', e);
-    }
-}
-
-// Handle button-based accept/reject using uid from button id
-async function acceptViaButton(sock, chatId, message, uid) {
-    try {
-        const reactor = message.key.participant || message.key.remoteJid;
-        console.log(`[marriage] acceptViaButton uid=${uid} reactor=${reactor} keys=${Object.keys(pendingMarriageByUid).join(',')}`);
-        const marriageRequest = pendingMarriageByUid[uid];
-        if (!marriageRequest) {
-            console.log(`[marriage] acceptViaButton NOT FOUND uid=${uid}`);
-            return await sock.sendMessage(chatId, { text: 'Заявка не найдена или уже истекла.' }, { quoted: message });
-        }
-        const { from, to, messageObj, uid: reqUid } = marriageRequest;
-        if (reactor !== to) {
-            return await sock.sendMessage(chatId, { text: 'Только получатель заявки может принять её.' }, { quoted: message });
-        }
-
-        // accept
-        if (!global.db.data.users[from]) global.db.data.users[from] = {};
-        if (!global.db.data.users[to]) global.db.data.users[to] = {};
-        global.db.data.users[from].pasangan = to;
-        global.db.data.users[to].pasangan = from;
-        const nameTo = await getDisplayName(sock, to);
-        const nameFrom = await getDisplayName(sock, from);
-        global.db.data.users[from].pasanganName = nameTo;
-        global.db.data.users[to].pasanganName = nameFrom;
-        try { userDB.save(global.db.data.users); } catch (e) { console.error('Failed saving users db', e); }
-
-        await sock.sendMessage(chatId, { text: `*${nameFrom}* и *${nameTo}* теперь в браке! 🥳` }, { quoted: messageObj });
-        // remove both mappings
-        const messageID = messageObj.key?.id;
-        if (messageID) delete pendingMarriageRequests[messageID];
-        if (reqUid) delete pendingMarriageByUid[reqUid];
-    } catch (e) {
-        console.error('acceptViaButton error', e);
-    }
-}
-
-async function rejectViaButton(sock, chatId, message, uid) {
-    try {
-        const reactor = message.key.participant || message.key.remoteJid;
-        console.log(`[marriage] rejectViaButton uid=${uid} reactor=${reactor} keys=${Object.keys(pendingMarriageByUid).join(',')}`);
-        const marriageRequest = pendingMarriageByUid[uid];
-        if (!marriageRequest) {
-            console.log(`[marriage] rejectViaButton NOT FOUND uid=${uid}`);
-            return await sock.sendMessage(chatId, { text: 'Заявка не найдена или уже истекла.' }, { quoted: message });
-        }
-        const { from, to, messageObj, uid: reqUid } = marriageRequest;
-        if (reactor !== to) {
-            return await sock.sendMessage(chatId, { text: 'Только получатель заявки может отклонить её.' }, { quoted: message });
-        }
-
-        await sock.sendMessage(chatId, {
-            text: `@${reactor.split('@')[0]} отклонил(а) заявку на брак от *${await getDisplayName(sock, from)}*`,
-            mentions: [reactor]
-        }, { quoted: messageObj });
-
-        const messageID = messageObj.key?.id;
-        if (messageID) delete pendingMarriageRequests[messageID];
-        if (reqUid) delete pendingMarriageByUid[reqUid];
-    } catch (e) {
-        console.error('rejectViaButton error', e);
     }
 }
 
 module.exports = {
     proposeCommand,
     divorceCommand,
-    handleReaction,
-    acceptViaButton,
-    rejectViaButton
+    handleReaction
 };
