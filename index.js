@@ -98,28 +98,28 @@ async function startXeonBotInc() {
         const { state, saveCreds } = await useMultiFileAuthState(`./session`)
         const msgRetryCounterCache = new NodeCache()
 
-const XeonBotInc = makeWASocket({
-    version,
-    logger: pino({ level: 'silent' }),
-    printQRInTerminal: !pairingCode,
-    browser: ["Ubuntu", "Chrome", "20.0.04"],
-
-    auth: {
-        creds: state.creds,
-        keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }).child({ level: "fatal" })),
-    },
-
-    markOnlineOnConnect: true,
-    generateHighQualityLinkPreview: true,
-    syncFullHistory: false, // НЕ загружать старые сообщения
-    getMessage: async () => null, // НЕ брать сообщения из локального хранилища
-
-    msgRetryCounterCache: msgRetryCounterCache,
-    defaultQueryTimeoutMs: 60000,
-    connectTimeoutMs: 60000,
-    keepAliveIntervalMs: 10000,
-})
-
+        const XeonBotInc = makeWASocket({
+            version,
+            logger: pino({ level: 'silent' }),
+            printQRInTerminal: !pairingCode,
+            browser: ["Ubuntu", "Chrome", "20.0.04"],
+            auth: {
+                creds: state.creds,
+                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }).child({ level: "fatal" })),
+            },
+            markOnlineOnConnect: true,
+            generateHighQualityLinkPreview: true,
+            syncFullHistory: false,
+            getMessage: async (key) => {
+                let jid = jidNormalizedUser(key.remoteJid)
+                let msg = await store.loadMessage(jid, key.id)
+                return msg?.message || ""
+            },
+            msgRetryCounterCache,
+            defaultQueryTimeoutMs: 60000,
+            connectTimeoutMs: 60000,
+            keepAliveIntervalMs: 10000,
+        })
 
         // Сохранение учетных данных при обновлении
         XeonBotInc.ev.on('creds.update', saveCreds)
@@ -151,6 +151,8 @@ const XeonBotInc = makeWASocket({
                     console.log('--- templateButtonReplyMessage detected ---')
                     console.log('remoteJid:', mek.key?.remoteJid, 'id:', mek.key?.id, 'participant:', mek.key?.participant)
                     console.log('selected:', selected)
+                    console.log('Full message object:')
+                    console.log(JSON.stringify(mek, null, 2))
                     // Подставим выбранный id/текст в conversation, чтобы существующая логика handleMessages увидела команду
                     mek.message.conversation = String(selected)
                 } else if (buttonsResp) {
