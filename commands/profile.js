@@ -50,10 +50,7 @@ async function profileCommand(sock, chatId, message) {
 👤 Роль: ${role}${marriageLine}
         `.trim();
 
-        await sock.sendMessage(
-            chatId,
-            { text: profile}
-        );
+        await sock.sendMessage(chatId,{ text: profile}, {quoted: message});
 
     } catch (e) {
         console.error(e);

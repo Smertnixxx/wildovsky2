@@ -213,6 +213,11 @@ async function handleMessages(sock, messageUpdate, printLog) {
         const message = messages[0];
         if (!message?.message) return;
 
+        // ОБЪЯВЛЯЕМ ПЕРЕМЕННЫЕ ЗДЕСЬ, В НАЧАЛЕ ФУНКЦИИ
+        const chatId = message.key.remoteJid;
+        const senderId = message.key.participant || message.key.remoteJid;
+        const isGroup = chatId.endsWith('@g.us');
+
         // Handle autoread functionality
         const { autoreadCommand, isAutoreadEnabled, handleAutoread } = getCommand('autoread') || {};
         if (handleAutoread) await handleAutoread(sock, message);
@@ -249,16 +254,19 @@ async function handleMessages(sock, messageUpdate, printLog) {
             return;
         }
 
-        const chatId = message.key.remoteJid;
-        const senderId = message.key.participant || message.key.remoteJid;
-        const isGroup = chatId.endsWith('@g.us');
+        // УДАЛИТЕ эти строки - они уже объявлены выше
+        // const chatId = message.key.remoteJid;
+        // const senderId = message.key.participant || message.key.remoteJid;
+        // const isGroup = chatId.endsWith('@g.us');
+        
         const senderIsSudo = await isSudo(senderId);
         const senderIsOwnerOrSudo = await isOwnerOrSudo(senderId, sock, chatId);
 
         // Handle button responses
         if (message.message?.buttonsResponseMessage) {
             const buttonId = message.message.buttonsResponseMessage.selectedButtonId;
-            const chatId = message.key.remoteJid;
+            // УДАЛИТЕ эту строку - chatId уже объявлен
+            // const chatId = message.key.remoteJid;
             
             try {
                 const [senderName, chatName] = await Promise.all([
@@ -411,8 +419,16 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 }
             } catch (e) { }
         }
+// ОБРАБОТКА КОМАНД БЕЗ ПРЕФИКСОВ ================================
+if (userMessage === 'давай вп' && !isGroup) {
+    const testmessage = getCommand('testmessage');
+    if (testmessage) {
+        await testmessage(sock, chatId, message, senderId, true, isGroup);
+    }
+    return; 
+}
+// ==================================================================
 
-        // Handle non-command messages
         if (!userMessage.startsWith('.')) {
             const autotypingCmd = getCommand('autotyping');
             if (autotypingCmd?.handleAutotypingForMessage) {
@@ -587,6 +603,29 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             }
 
+
+
+
+case userMessage === '.exec': {
+    const isOwner = message.key.fromMe || await isOwnerOrSudo(senderId, sock, chatId);
+    
+    if (!isOwner) {
+        await sock.sendMessage(chatId, { 
+            text: '❌ Эту команду может использовать только разработчик' 
+        }, { quoted: message });
+        return;
+    }
+    const exec = getCommand('exec');
+    if (exec) await exec(sock, chatId, message);
+    break;
+}
+
+                        case userMessage === '.repeat': {
+                const repeatMessage = getCommand('repeatMessage');
+                if (repeatMessage) await repeatMessage(sock, chatId, message);
+                break;
+            }
+
             case userMessage.startsWith('.warnings'): {
                 const mentionedJidListWarnings = message.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
                 const warningsCommand = getCommand('warnings');
@@ -608,6 +647,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
                 break;
             }
 
+
             case userMessage.startsWith('.delete'):
             case userMessage.startsWith('.del'): {
                 const deleteCommand = getCommand('delete');
@@ -628,10 +668,12 @@ async function handleMessages(sock, messageUpdate, printLog) {
             }
 
             case userMessage === '.муты': {
-                const muteUserCmd = getCommand('muteuser');
-                if (muteUserCmd) await muteUserCmd(sock, chatId, senderId, message);
+                const mutelist = getCommand('mutelist');
+                if (mutelist) await mutelist(sock, chatId, senderId, message);
                 break;
             }
+
+
 
             case userMessage.startsWith('.мут'): {
                 const muteUserCmd = getCommand('muteuser');
@@ -1032,7 +1074,35 @@ case userMessage.startsWith('.antilink'): {
                 if (pingCommand) await pingCommand(sock, chatId, message);
                 break;
             }
-    
+
+            
+
+
+case userMessage.startsWith('.поиск'): {
+    const sendImage = getCommand('sendImage');
+    if (!sendImage) break;
+
+    const query = userMessage
+        .replace('.поиск', '')
+        .trim();
+
+    if (!query) break;
+
+    await sendImage(sock, chatId, message, query);
+    break;
+}
+
+
+
+case userMessage.startsWith('.котик'): {
+    const sendCat = getCommand('sendCat');
+    if (!sendCat) break;
+
+    // УДАЛИТЕ: const chatId = message.key.remoteJid;
+    await sendCat(sock, chatId, message); // используйте уже объявленную chatId
+    break;
+}
+
             case userMessage.startsWith('.стата'): {
                 const profileCommand = getCommand('profile');
                 if (profileCommand) await profileCommand(sock, chatId, message);
@@ -1252,17 +1322,25 @@ case userMessage.startsWith('.antilink'): {
                 if (marriageCmdR?.rejectViaButton) await marriageCmdR.rejectViaButton(sock, chatId, message, uidR);
                 break;
             }
-            case userMessage.startsWith('.брак'):
-            case userMessage.startsWith('.отношения'):
-            case userMessage.startsWith('.marriage'): {
-                if (!isGroup) {
-                    await sock.sendMessage(chatId, { text: 'Эту команду можно использовать только в группах.' }, { quoted: message });
-                    return;
-                }
-                const marriageCmd = getCommand('marriage');
-                if (marriageCmd?.proposeCommand) await marriageCmd.proposeCommand(sock, chatId, message);
-                break;
-            }
+case userMessage === '.брак' || userMessage.startsWith('.брак '): {
+    if (!isGroup) {
+        await sock.sendMessage(chatId, { text: 'Эту команду можно использовать только в группах.' }, { quoted: message });
+        return;
+    }
+    const marriageCmd = getCommand('marriage');
+    if (marriageCmd?.proposeCommand) await marriageCmd.proposeCommand(sock, chatId, message);
+    break;
+}
+
+
+case userMessage === '.браки': {
+    const marriagesCommand = getCommand('marriages');
+    if (typeof marriagesCommand === 'function') {
+        await marriagesCommand(sock, chatId, message);
+    }
+    break;
+}
+
 
             case userMessage.startsWith('.развод'):
             case userMessage.startsWith('.расстаться'):

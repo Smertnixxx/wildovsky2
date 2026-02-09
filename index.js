@@ -151,8 +151,6 @@ async function startXeonBotInc() {
                     console.log('--- templateButtonReplyMessage detected ---')
                     console.log('remoteJid:', mek.key?.remoteJid, 'id:', mek.key?.id, 'participant:', mek.key?.participant)
                     console.log('selected:', selected)
-                    console.log('Full message object:')
-                    console.log(JSON.stringify(mek, null, 2))
                     // Подставим выбранный id/текст в conversation, чтобы существующая логика handleMessages увидела команду
                     mek.message.conversation = String(selected)
                 } else if (buttonsResp) {

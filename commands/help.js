@@ -1,102 +1,143 @@
 // commands/help.js
 const path = require('path');
 const fs = require('fs');
-const { sendCarousel } = require('../lib/sendCarousel');
+const fetch = require('node-fetch');
 const getDisplayName = require('../lib/getDisplayName');
+const { generateWAMessageFromContent, proto, prepareWAMessageMedia } = require('@whiskeysockets/baileys');
 
 async function helpCommand(sock, chatId, message) {
     const senderId = (message && message.key && (message.key.participant || message.key.remoteJid)) || '';
     const name = await getDisplayName(sock, senderId);
-
-    let imgBuffer = null;
-    try {
-        imgBuffer = fs.readFileSync(path.join(process.cwd(), 'assets', 'котик.jpg'));
-    } catch (e) {
-        console.warn('картинка не найдена');
-    }
+    const userId = senderId.split('@')[0];
 
     const sections = [
         {
             title: "👥 Для группы",
             rows: [
-                { title: ".все", description: "Отметить всех участников", id: "" },
-                { title: ".antilink", description: "Включить/выключить защиту от ссылок", id: "" },
-                { title: ".мут @пользователь (причина) (срок)", description: "Заглушить участника", id: "" },
-                { title: ".размут @пользователь", description: "Разглушить участника", id: "" },
-                { title: ".муты", description: "Список замьюченных участников", id: "" },
-                { title: ".инфогруппа", description: "Информация о группе", id: "" },
-                { title: ".кик @пользователь", description: "Исключить участника", id: "" },
-                { title: ".повысить @пользователь", description: "Дать права администратора", id: "" },
-                { title: ".понизить @пользователь", description: "Снять права администратора", id: "" }
+                { title: ".все", description: "Отметить всех участников", id: "cmd_vse" },
+                { title: ".antilink", description: "Включить/выключить защиту от ссылок", id: "cmd_antilink" },
+                { title: ".мут @пользователь (причина) (срок)", description: "Заглушить участника", id: "cmd_mute" },
+                { title: ".размут @пользователь", description: "Разглушить участника", id: "cmd_unmute" },
+                { title: ".муты", description: "Список замьюченных участников", id: "cmd_mutes" },
+                { title: ".инфогруппа", description: "Информация о группе", id: "cmd_groupinfo" },
+                { title: ".кик @пользователь", description: "Исключить участника", id: "cmd_kick" },
+                { title: ".повысить @пользователь", description: "Дать права администратора", id: "cmd_promote" },
+                { title: ".понизить @пользователь", description: "Снять права администратора", id: "cmd_demote" }
             ]
         },
         {
             title: "⚙️ Разное",
             rows: [
-                { title: ".разработчик", description: "Информация о разработчике", id: "" },
-                { title: ".пинг", description: "Проверка скорости отклика бота", id: "" },
-                { title: ".ttt", description: "Крестики-нолики", id: "" }
+                { title: ".разработчик", description: "Информация о разработчике", id: "cmd_dev" },
+                { title: ".пинг", description: "Проверка скорости отклика бота", id: "cmd_ping" },
+                { title: ".поиск", description: "Ищет картинки по вашему запросу в интернете", id: "cmd_ping" },
+                { title: ".котик", description: "Отправляет случайную картинку котика", id: "cmd_ping" },
+                { title: ".ttt", description: "Крестики-нолики", id: "cmd_ttt" }
             ]
         },
         {
             title: "🔃 Преобразование",
             rows: [
-                { title: ".стикер", description: "Создать стикер из фото/видео", id: "" },
-                { title: ".ptv", description: "Конвертировать в круглое видео", id: "" },
-                { title: ".vv", description: "Скачивает и отправляет однократное сообщение для просмотра", id: "" },
-                { title: ".tts (текст)", description: "Озвучить текст", id: "" }
+                { title: ".стикер", description: "Создать стикер из фото/видео", id: "cmd_sticker" },
+                { title: ".ptv", description: "Конвертировать в круглое видео", id: "cmd_ptv" },
+                { title: ".vv", description: "Скачивает и отправляет однократное сообщение для просмотра", id: "cmd_vv" },
+                { title: ".tts (текст)", description: "Озвучить текст", id: "cmd_tts" }
             ]
         },
         {
             title: "🎭 Аниме команды",
             rows: [
-                { title: ".обнять @пользователь", description: "Обнять участника", id: "" },
-                { title: ".поцеловать @пользователь", description: "Поцеловать участника", id: "" },
-                { title: ".убить @пользователь", description: "Убить участника", id: "" },
-                { title: ".кринж @пользователь", description: "Показать кринж", id: "" },
-                { title: ".укусить @пользователь", description: "Укусить участника", id: "" },
-                { title: ".ударить @пользователь", description: "Ударить участника", id: "" },
-                { title: ".облизнуть @пользователь", description: "Облизнуть участника", id: "" }
+                { title: ".обнять @пользователь", description: "Обнять участника", id: "cmd_hug" },
+                { title: ".поцеловать @пользователь", description: "Поцеловать участника", id: "cmd_kiss" },
+                { title: ".убить @пользователь", description: "Убить участника", id: "cmd_kill" },
+                { title: ".кринж @пользователь", description: "Показать кринж", id: "cmd_cringe" },
+                { title: ".укусить @пользователь", description: "Укусить участника", id: "cmd_bite" },
+                { title: ".ударить @пользователь", description: "Ударить участника", id: "cmd_slap" },
+                { title: ".облизнуть @пользователь", description: "Облизнуть участника", id: "cmd_lick" }
+            ]
+        },
+        {
+            title: "💘 Браки (ваш брак отображается в .стата)",
+            rows: [
+                { title: ".брак @пользователь", description: "Отправить запрос на брак пользователю", id: "cmd_marry" },
+                 { title: ".браки", description: "Посмотреть активный список браков в чате", id: "cmd_marry" },
+                { title: ".развод @пользователь", description: "Расстаться", id: "cmd_divorce" }
+            ]
+        },
+        {
+            title: "🏆 Таблица лидеров",
+            rows: [
+                { title: ".сообщения", description: "Показывает количество сообщений написанными участниками в чате", id: "cmd_marry" },
+              
             ]
         },
                 {
-            title: "💘 Браки (ваш брак отображается в .стата)",
+            title: "👑 Команды разработчика",
             rows: [
-                { title: ".брак @пользователь", description: "Отправить запрос на брак пользователю", id: "" },
-                { title: ".развод @пользователь", description: "Расстаться", id: "" },
-    
+                { title: ".exec (quoted message)", description: "structure message", id: "cmd_marry" },
             ]
         }
     ];
 
-const messages = [
-    {
-        text: '',
-        footer: 'Предлагайте идеи: wa.me/79292991077',
-        header: `Привет, ${name}! Как дела?`,
-        imageBuffer: imgBuffer,
-        imageUrl: null,
-         buttons: [
-            ['.пинг', '.пинг'] 
-        ],
-        copy: null,
-        urls: null,
-        list: [
-            ['Команды', sections]
-        ]
-    }
-];
-
-
     try {
-        await sendCarousel(sock, chatId, messages, message, {
-            bodyText: 'Меню команд',
-            footerText: 'Выбери раздел для просмотра команд'
+        // Получаем картинку котика
+        let res = await fetch('https://cataas.com/cat');
+        let imgBuffer = await res.buffer();
+
+        // Подготавливаем медиа
+        const media = await prepareWAMessageMedia(
+            { image: imgBuffer },
+            { upload: sock.waUploadToServer }
+        );
+
+        const msg = generateWAMessageFromContent(chatId, {
+            viewOnceMessage: {
+                message: {
+                    messageContextInfo: {
+                        deviceListMetadata: {},
+                        deviceListMetadataVersion: 2
+                    },
+                    interactiveMessage: proto.Message.InteractiveMessage.create({
+                        body: proto.Message.InteractiveMessage.Body.create({
+                            text: `Привет, @${userId}! Как дела?\nВыбери раздел команд:`
+                        }),
+                        footer: proto.Message.InteractiveMessage.Footer.create({
+                            text: "Предлагайте идеи: wa.me/79292991077"
+                        }),
+                        header: proto.Message.InteractiveMessage.Header.create({
+                            title: ``,
+                            hasMediaAttachment: true,
+                            imageMessage: media.imageMessage
+                        }),
+                        nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.create({
+                            buttons: [
+                                {
+                                    name: "single_select",
+                                    buttonParamsJson: JSON.stringify({
+                                        title: "Список команд",
+                                        sections: sections
+                                    })
+                                }
+                            ]
+                        }),
+                        contextInfo: {
+                            mentionedJid: [senderId]
+                        }
+                    })
+                }
+            }
+        }, { quoted: message });
+
+        await sock.relayMessage(chatId, msg.message, {
+            messageId: msg.key.id
         });
     } catch (error) {
-        console.error('ошибка:', error);
-        const fallbackText = `Привет ${name}, как дела?\n\nДоступные команды:\n👥 Для группы\n.все, .antilink, .мут, .размут\n\n⚙️ Разное\n.разработчик, .пинг, .ttt\n\nПолный список: wa.me/79292991077`;
-        await sock.sendMessage(chatId, { text: fallbackText });
+        console.error('ошибка отправки меню:', error);
+        const fallback = `Привет @${userId}!\n\nДоступные команды:\n👥 Для группы\n.все, .antilink, .мут, .размут\n\n⚙️ Разное\n.разработчик, .пинг, .ttt\n\nПолный список: wa.me/79292991077`;
+        await sock.sendMessage(chatId, { 
+            text: fallback,
+            mentions: [senderId]
+        });
     }
 }
 
