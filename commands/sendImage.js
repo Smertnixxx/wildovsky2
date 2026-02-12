@@ -6,8 +6,6 @@ const {
 } = require('@whiskeysockets/baileys');
 
 async function findimage(query) {
-    if (!query) return null;
-
     const url = new URL('https://api.baguss.xyz/api/search/gimage');
     url.searchParams.set('q', query);
 
@@ -15,10 +13,22 @@ async function findimage(query) {
     if (!res.ok) return null;
 
     const data = await res.json();
-    if (!data.result || !data.result.length) return null;
+    if (!Array.isArray(data.result) || !data.result.length) return null;
 
-    const item = data.result[Math.floor(Math.random() * data.result.length)];
-    return item.url || null;
+    return data.result;
+}
+
+async function loadimage(url) {
+    const res = await fetch(url, { redirect: 'follow' });
+    if (!res.ok) return null;
+
+    const type = res.headers.get('content-type') || '';
+    if (!type.startsWith('image/')) return null;
+
+    const buf = await res.buffer();
+    if (!buf || buf.length < 10_000) return null;
+
+    return buf;
 }
 
 async function sendImage(sock, chatId, quoted, query) {
@@ -31,14 +41,29 @@ async function sendImage(sock, chatId, quoted, query) {
 
     if (!senderId) return;
 
-    const imageUrl = await findimage(query);
-    if (!imageUrl) return;
+    const list = await findimage(query);
+    if (!list) {
+        await sock.sendMessage(chatId, { text: 'не найдено' }, { quoted });
+        return;
+    }
 
-    const res = await fetch(imageUrl);
-    const imgBuffer = await res.buffer();
+    let buffer = null;
+
+    for (let i = 0; i < 2; i++) {
+        const item = list[Math.floor(Math.random() * list.length)];
+        if (!item?.url) continue;
+
+        buffer = await loadimage(item.url);
+        if (buffer) break;
+    }
+
+    if (!buffer) {
+        await sock.sendMessage(chatId, { text: 'не найдено' }, { quoted });
+        return;
+    }
 
     const media = await prepareWAMessageMedia(
-        { image: imgBuffer },
+        { image: buffer },
         { upload: sock.waUploadToServer }
     );
 
@@ -70,11 +95,10 @@ async function sendImage(sock, chatId, quoted, query) {
                 })
             }
         }
-    }, {quoted});
+    }, { quoted });
 
     await sock.relayMessage(chatId, msg.message, {
-        messageId: msg.key.id,
-        quoted
+        messageId: msg.key.id
     });
 }
 

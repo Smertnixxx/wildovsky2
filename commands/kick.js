@@ -110,15 +110,15 @@ async function kickCommand(sock, chatId, senderId, mentionedJids, message) {
 
     try {
         await sock.groupParticipantsUpdate(chatId, usersToKick, "remove");
+    
         
-        const usernames = await Promise.all(usersToKick.map(async jid => {
-            return `@${jid.split('@')[0]}`;
-        }));
-        
-        await sock.sendMessage(chatId, { 
-            text: `участник ${usernames.join(', ')} был успешно кикнут с чата`,
-            mentions: usersToKick
-        });
+await sock.sendMessage(chatId, {
+    react: {
+        text: '✅',         
+        key: message.key
+    }
+});
+
     } catch (error) {
         console.error('Error in kick command:', error);
         await sock.sendMessage(chatId, { 

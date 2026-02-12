@@ -16,21 +16,21 @@ async function demoteCommand(sock, chatId, mentionedJids, message) {
             
             if (!adminStatus.isBotAdmin) {
                 await sock.sendMessage(chatId, { 
-                    text: '❌ Error: Please make the bot an admin first to use this command.'
+                    text: '❌ Дайте админку боту чтобы использовать эту команду.'
                 });
                 return;
             }
 
             if (!adminStatus.isSenderAdmin) {
                 await sock.sendMessage(chatId, { 
-                    text: '❌ Error: Only group admins can use the demote command.'
+                    text: '❌ Только админы группы могут использовать данную команду.'
                 });
                 return;
             }
         } catch (adminError) {
             console.error('Error checking admin status:', adminError);
             await sock.sendMessage(chatId, { 
-                text: '❌ Error: Please make sure the bot is an admin of this group.'
+                text: '❌ Дайте админку боту чтобы использовать эту команду.'
             });
             return;
         }
@@ -49,7 +49,7 @@ async function demoteCommand(sock, chatId, mentionedJids, message) {
         // If no user found through either method
         if (userToDemote.length === 0) {
             await sock.sendMessage(chatId, { 
-                text: '❌ Error: Please mention the user or reply to their message to demote!'
+                text: 'Отметьте участника которого вы хотите понизить или ответьте на сообщение\n📌 Вот пример\n\n.понизить @пользователь'
             });
             return;
         }

@@ -512,19 +512,6 @@ if (userMessage === 'давай вп' && !isGroup) {
         let commandExecuted = false;
 
         switch (true) {
-            case userMessage === '.simage': {
-                const quotedMessage = message.message?.extendedTextMessage?.contextInfo?.quotedMessage;
-                if (quotedMessage?.stickerMessage) {
-                    const simageCommand = getCommand('simage');
-                    if (simageCommand) await simageCommand(sock, quotedMessage, chatId);
-                } else {
-                    await sock.sendMessage(chatId, { 
-                        text: 'Please reply to a sticker with the .simage command to convert it.' 
-                    }, { quoted: message });
-                }
-                commandExecuted = true;
-                break;
-            }
 
             case userMessage.startsWith('.kick'):
             case userMessage.startsWith('.кик'): {
@@ -620,6 +607,7 @@ case userMessage === '.exec': {
     break;
 }
 
+
                         case userMessage === '.repeat': {
                 const repeatMessage = getCommand('repeatMessage');
                 if (repeatMessage) await repeatMessage(sock, chatId, message);
@@ -682,7 +670,7 @@ case userMessage === '.exec': {
                 }
                 break;
             }
-
+             case userMessage.startsWith('.размут'):
             case userMessage.startsWith('.анмут'): {
                 const unmuteCommandUser = getCommand('unmuteuser');
                 if (unmuteCommandUser) await unmuteCommandUser(sock, chatId, senderId, message);
@@ -856,21 +844,9 @@ case userMessage.startsWith('.antilink'): {
                 break;
             }
 
-            case userMessage === '.joke': {
-                const jokeCommand = getCommand('joke');
-                if (jokeCommand) await jokeCommand(sock, chatId, message);
-                break;
-            }
-
             case userMessage === '.quote': {
                 const quoteCommand = getCommand('quote');
                 if (quoteCommand) await quoteCommand(sock, chatId, message);
-                break;
-            }
-
-            case userMessage === '.fact': {
-                const factCommand = getCommand('fact');
-                if (factCommand) await factCommand(sock, chatId, message, message);
                 break;
             }
 
@@ -884,12 +860,6 @@ case userMessage.startsWith('.antilink'): {
                         text: 'Please specify a city, e.g., .weather London' 
                     }, { quoted: message });
                 }
-                break;
-            }
-
-            case userMessage === '.news': {
-                const newsCommand = getCommand('news');
-                if (newsCommand) await newsCommand(sock, chatId);
                 break;
             }
 
@@ -962,25 +932,6 @@ case userMessage.startsWith('.antilink'): {
     break;
 }
 
-
-            case userMessage.startsWith('.compliment'): {
-                const complimentCmd = getCommand('compliment');
-                if (complimentCmd?.complimentCommand) {
-                    await complimentCmd.complimentCommand(sock, chatId, message);
-                }
-                break;
-            }
-
-
-
-            case userMessage.startsWith('.insult'): {
-                const insultCmd = getCommand('insult');
-                if (insultCmd?.insultCommand) {
-                    await insultCmd.insultCommand(sock, chatId, message);
-                }
-                break;
-            }
-
             case userMessage.startsWith('.8ball'): {
                 const question = userMessage.split(' ').slice(1).join(' ');
                 const eightBallCmd = getCommand('eightball');
@@ -990,50 +941,11 @@ case userMessage.startsWith('.antilink'): {
                 break;
             }
 
-            case userMessage.startsWith('.lyrics'): {
-                const songTitle = userMessage.split(' ').slice(1).join(' ');
-                const lyricsCmd = getCommand('lyrics');
-                if (lyricsCmd?.lyricsCommand) {
-                    await lyricsCmd.lyricsCommand(sock, chatId, songTitle, message);
-                }
-                break;
-            }
-
-            case userMessage.startsWith('.simp'): {
-                const quotedMsg = message.message?.extendedTextMessage?.contextInfo?.quotedMessage;
-                const mentionedJid = message.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
-                const simpCmd = getCommand('simp');
-                if (simpCmd?.simpCommand) {
-                    await simpCmd.simpCommand(sock, chatId, quotedMsg, mentionedJid, senderId);
-                }
-                break;
-            }
-
-            case userMessage.startsWith('.stupid'):
-            case userMessage.startsWith('.itssostupid'):
-            case userMessage.startsWith('.iss'): {
-                const stupidQuotedMsg = message.message?.extendedTextMessage?.contextInfo?.quotedMessage;
-                const stupidMentionedJid = message.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
-                const stupidArgs = userMessage.split(' ').slice(1);
-                const stupidCmd = getCommand('stupid');
-                if (stupidCmd?.stupidCommand) {
-                    await stupidCmd.stupidCommand(sock, chatId, stupidQuotedMsg, stupidMentionedJid, senderId, stupidArgs);
-                }
-                break;
-            }
 
             case userMessage === '.dare': {
                 const dareCmd = getCommand('dare');
                 if (dareCmd?.dareCommand) {
                     await dareCmd.dareCommand(sock, chatId, message);
-                }
-                break;
-            }
-
-            case userMessage === '.truth': {
-                const truthCmd = getCommand('truth');
-                if (truthCmd?.truthCommand) {
-                    await truthCmd.truthCommand(sock, chatId, message);
                 }
                 break;
             }
@@ -1172,41 +1084,6 @@ case userMessage.startsWith('.котик'): {
                 break;
             }
 
-            case userMessage.startsWith('.goodbye'): {
-                if (isGroup) {
-                    if (!isSenderAdmin) {
-                        const adminStatus = await isAdmin(sock, chatId, senderId);
-                        isSenderAdmin = adminStatus.isSenderAdmin;
-                    }
-
-                    if (isSenderAdmin || message.key.fromMe) {
-                        const goodbyeCmd = getCommand('goodbye');
-                        if (goodbyeCmd?.goodbyeCommand) {
-                            await goodbyeCmd.goodbyeCommand(sock, chatId, message);
-                        }
-                    } else {
-                        await sock.sendMessage(chatId, { 
-                            text: 'Только админы могут использовать эту команду.' 
-                        }, { quoted: message });
-                    }
-                } else {
-                    await sock.sendMessage(chatId, { 
-                        text: 'Эту команду можно использовать только в группах.' 
-                    }, { quoted: message });
-                }
-                break;
-            }
-
-            case userMessage === '.git':
-            case userMessage === '.github':
-            case userMessage === '.sc':
-            case userMessage === '.script':
-            case userMessage === '.repo': {
-                const githubCommand = getCommand('github');
-                if (githubCommand) await githubCommand(sock, chatId, message);
-                break;
-            }
-
             case userMessage.startsWith('.antibadword'): {
                 if (!isGroup) {
                     await sock.sendMessage(chatId, { 
@@ -1257,16 +1134,6 @@ case userMessage.startsWith('.котик'): {
                 break;
             }
 
-            case userMessage.startsWith('.take'):
-            case userMessage.startsWith('.steal'): {
-                const isSteal = userMessage.startsWith('.steal');
-                const sliceLen = isSteal ? 6 : 5;
-                const takeArgs = rawText.slice(sliceLen).trim().split(' ');
-                const takeCommand = getCommand('take');
-                if (takeCommand) await takeCommand(sock, chatId, message, takeArgs);
-                break;
-            }
-
             case userMessage === '.flirt': {
                 const flirtCmd = getCommand('flirt');
                 if (flirtCmd?.flirtCommand) {
@@ -1278,12 +1145,6 @@ case userMessage.startsWith('.котик'): {
             case userMessage.startsWith('.character'): {
                 const characterCommand = getCommand('character');
                 if (characterCommand) await characterCommand(sock, chatId, message);
-                break;
-            }
-
-            case userMessage.startsWith('.waste'): {
-                const wastedCommand = getCommand('wasted');
-                if (wastedCommand) await wastedCommand(sock, chatId, message);
                 break;
             }
 
@@ -1382,27 +1243,6 @@ case userMessage === '.браки': {
                 break;
             }
 
-            case userMessage === '.staff':
-            case userMessage === '.admins':
-            case userMessage === '.listadmin': {
-                if (!isGroup) {
-                    await sock.sendMessage(chatId, { 
-                        text: 'This command can only be used in groups!' 
-                    }, { quoted: message });
-                    return;
-                }
-                const staffCommand = getCommand('staff');
-                if (staffCommand) await staffCommand(sock, chatId, message);
-                break;
-            }
-
-            case userMessage.startsWith('.tourl'):
-            case userMessage.startsWith('.url'): {
-                const urlCommand = getCommand('url');
-                if (urlCommand) await urlCommand(sock, chatId, message);
-                break;
-            }
-
             case userMessage.startsWith('.emojimix'):
             case userMessage.startsWith('.emix'): {
                 const emojimixCommand = getCommand('emojimix');
@@ -1410,14 +1250,6 @@ case userMessage === '.браки': {
                 break;
             }
 
-            case userMessage.startsWith('.tg'):
-            case userMessage.startsWith('.stickertelegram'):
-            case userMessage.startsWith('.tgsticker'):
-            case userMessage.startsWith('.telesticker'): {
-                const stickerTelegramCommand = getCommand('stickertelegram');
-                if (stickerTelegramCommand) await stickerTelegramCommand(sock, chatId, message);
-                break;
-            }
 
             case userMessage === '.vv': {
                 const viewOnceCommand = getCommand('viewonce');
@@ -1438,30 +1270,6 @@ case userMessage === '.браки': {
                 if (autoStatusCmd?.autoStatusCommand) {
                     await autoStatusCmd.autoStatusCommand(sock, chatId, message, autoStatusArgs);
                 }
-                break;
-            }
-
-            case userMessage.startsWith('.metallic'):
-            case userMessage.startsWith('.ice'):
-            case userMessage.startsWith('.snow'):
-            case userMessage.startsWith('.impressive'):
-            case userMessage.startsWith('.matrix'):
-            case userMessage.startsWith('.light'):
-            case userMessage.startsWith('.neon'):
-            case userMessage.startsWith('.devil'):
-            case userMessage.startsWith('.purple'):
-            case userMessage.startsWith('.thunder'):
-            case userMessage.startsWith('.leaves'):
-            case userMessage.startsWith('.1917'):
-            case userMessage.startsWith('.arena'):
-            case userMessage.startsWith('.hacker'):
-            case userMessage.startsWith('.sand'):
-            case userMessage.startsWith('.blackpink'):
-            case userMessage.startsWith('.glitch'):
-            case userMessage.startsWith('.fire'): {
-                const style = userMessage.split(' ')[0].slice(1);
-                const textmakerCommand = getCommand('textmaker');
-                if (textmakerCommand) await textmakerCommand(sock, chatId, message, userMessage, style);
                 break;
             }
 
@@ -1529,38 +1337,10 @@ case userMessage === '.браки': {
                 break;
             }
 
-            case userMessage.startsWith('.igsc'): {
-                const igsCmd = getCommand('igs');
-                if (igsCmd?.igsCommand) {
-                    await igsCmd.igsCommand(sock, chatId, message, true);
-                }
-                break;
-            }
-
-            case userMessage.startsWith('.igs'): {
-                const igsCmd = getCommand('igs');
-                if (igsCmd?.igsCommand) {
-                    await igsCmd.igsCommand(sock, chatId, message, false);
-                }
-                break;
-            }
-
-            case userMessage.startsWith('.fb'):
-            case userMessage.startsWith('.facebook'): {
-                const facebookCommand = getCommand('facebook');
-                if (facebookCommand) await facebookCommand(sock, chatId, message);
-                break;
-            }
 
             case userMessage.startsWith('.music'): {
                 const playCommand = getCommand('play');
                 if (playCommand) await playCommand(sock, chatId, message);
-                break;
-            }
-
-            case userMessage.startsWith('.spotify'): {
-                const spotifyCommand = getCommand('spotify');
-                if (spotifyCommand) await spotifyCommand(sock, chatId, message);
                 break;
             }
 
@@ -1631,16 +1411,6 @@ case userMessage === '.браки': {
                 break;
             }
 
-case userMessage === '.goodnight':
-            case userMessage === '.lovenight':
-            case userMessage === '.gn': {
-                const goodnightCmd = getCommand('goodnight');
-                if (goodnightCmd?.goodnightCommand) {
-                    await goodnightCmd.goodnightCommand(sock, chatId, message);
-                }
-                break;
-            }
-
             case userMessage === '.shayari':
             case userMessage === '.shayri': {
                 const shayariCmd = getCommand('shayari');
@@ -1650,24 +1420,11 @@ case userMessage === '.goodnight':
                 break;
             }
 
-            case userMessage === '.roseday': {
-                const rosedayCmd = getCommand('roseday');
-                if (rosedayCmd?.rosedayCommand) {
-                    await rosedayCmd.rosedayCommand(sock, chatId, message);
-                }
-                break;
-            }
-
             case userMessage.startsWith('.imagine'):
             case userMessage.startsWith('.flux'):
             case userMessage.startsWith('.dalle'): {
                 const imagineCommand = getCommand('imagine');
                 if (imagineCommand) await imagineCommand(sock, chatId, message);
-                break;
-            }
-
-            case userMessage === '.jid': {
-                await groupJidCommand(sock, chatId, message);
                 break;
             }
 
@@ -1756,9 +1513,13 @@ case userMessage === '.goodnight':
             case userMessage.startsWith('.убить'):
             case userMessage.startsWith('.кринж'):
             case userMessage.startsWith('.укусить'):
+            case userMessage.startsWith('.танцевать'):
+            case userMessage.startsWith('.тык'):
+            case userMessage.startsWith('.пнуть'):
+            case userMessage.startsWith('.шлепнуть'):
+            case userMessage.startsWith('.подмигнуть'):
             case userMessage.startsWith('.поцеловать'):
             case userMessage.startsWith('.ударить'):
-            // Устаревшие команды (для совместимости):
             case userMessage.startsWith('.facepalm'):
             case userMessage.startsWith('.face-palm'):
             case userMessage.startsWith('.animuquote'):
@@ -1777,40 +1538,6 @@ case userMessage === '.goodnight':
                     await animeCmd.animeCommand(sock, chatId, message, args);
                 }
                 
-                commandExecuted = true;
-                break;
-            }
-
-            case userMessage === '.crop': {
-                const stickercropCommand = getCommand('stickercrop');
-                if (stickercropCommand) await stickercropCommand(sock, chatId, message);
-                commandExecuted = true;
-                break;
-            }
-
-            case userMessage.startsWith('.pies'): {
-                const parts = rawText.trim().split(/\s+/);
-                const args = parts.slice(1);
-                const piesCmd = getCommand('pies');
-                if (piesCmd?.piesCommand) {
-                    await piesCmd.piesCommand(sock, chatId, message, args);
-                }
-                commandExecuted = true;
-                break;
-            }
-
-            case userMessage === '.china':
-            case userMessage === '.indonesia':
-            case userMessage === '.japan':
-            case userMessage === '.korea':
-            case userMessage === '.india':
-            case userMessage === '.malaysia':
-            case userMessage === '.thailand': {
-                const country = userMessage.slice(1);
-                const piesCmd = getCommand('pies');
-                if (piesCmd?.piesAlias) {
-                    await piesCmd.piesAlias(sock, chatId, message, country);
-                }
                 commandExecuted = true;
                 break;
             }
@@ -1844,12 +1571,6 @@ case userMessage === '.goodnight':
                 break;
             }
 
-            case userMessage.startsWith('.sora'): {
-                const soraCommand = getCommand('sora');
-                if (soraCommand) await soraCommand(sock, chatId, message);
-                break;
-            }
-
             default: {
                 if (isGroup) {
                     const chatbotCmd = getCommand('chatbot');
@@ -1879,22 +1600,6 @@ case userMessage === '.goodnight':
             }
         }
 
-        // Function to handle .groupjid command
-        async function groupJidCommand(sock, chatId, message) {
-            const groupJid = message.key.remoteJid;
-
-            if (!groupJid.endsWith('@g.us')) {
-                return await sock.sendMessage(chatId, {
-                    text: "❌ This command can only be used in a group."
-                });
-            }
-
-            await sock.sendMessage(chatId, {
-                text: `✅ Group JID: ${groupJid}`
-            }, {
-                quoted: message
-            });
-        }
 
         if (userMessage.startsWith('.')) {
             const reactionsLib = require('./lib/reactions');
@@ -1966,13 +1671,6 @@ async function handleGroupParticipantUpdate(sock, update) {
             const welcomeCmd = getCommand('welcome');
             if (welcomeCmd?.handleJoinEvent) {
                 await welcomeCmd.handleJoinEvent(sock, id, participants);
-            }
-        }
-
-        if (action === 'remove') {
-            const goodbyeCmd = getCommand('goodbye');
-            if (goodbyeCmd?.handleLeaveEvent) {
-                await goodbyeCmd.handleLeaveEvent(sock, id, participants);
             }
         }
     } catch (error) {

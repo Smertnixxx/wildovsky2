@@ -190,7 +190,7 @@ async function miscCommand(sock, chatId, message, args) {
         }
     } catch (error) {
         console.error('Error in misc command:', error);
-        await sock.sendMessage(chatId, { text: '❌ Failed to generate image. Check your parameters and try again.' }, { quoted: message });
+        await console.log('❌ Failed to generate image. Check your parameters and try again.');
     }
 }
 

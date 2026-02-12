@@ -78,7 +78,7 @@ async function muteCommand2(sock, chatId, senderId, message) {
             }, { quoted: message });
             return;
         }
-
+return sock.sendMessage(chatId, {text: 'команда мут временно недоступна'}, { quoted: message })
         let who = message.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0] ||
                   message.message?.extendedTextMessage?.contextInfo?.participant;
 
@@ -96,26 +96,38 @@ async function muteCommand2(sock, chatId, senderId, message) {
         
         console.log(`Попытка замутить: ${normalizedWho} в чате ${chatId}`);
 
-        const botId = sock.user.jid;
-        const groupMeta = await sock.groupMetadata(chatId);
-        const owner = groupMeta.owner || groupMeta.participants.find(p => p.admin === 'superadmin')?.id;
+      const botId = sock.user.jid;
+const botOwnerId = sock.user.id;
+const groupMeta = await sock.groupMetadata(chatId);
+const owner = groupMeta.owner || groupMeta.participants.find(p => p.admin === 'superadmin')?.id;
 
-        if (normalizedWho === botId) {
-            await sock.sendMessage(chatId, { 
-                text: '❌ Нельзя замутить бота',
-                mentions: [normalizedWho]
-            }, { quoted: message });
-            return;
-        }
 
-        if (normalizedWho === senderId) {
-            await sock.sendMessage(chatId, { 
-                text: '❌ Нельзя замутить самого себя',
-                mentions: [normalizedWho]
-            }, { quoted: message });
-            return;
-        }
+// 1. Проверка на бота
+if (normalizedWho === botId) {
+    await sock.sendMessage(chatId, { 
+        text: '❌ Нельзя замутить бота',
+        mentions: [normalizedWho]
+    }, { quoted: message });
+    return;
+}
 
+// 2. Проверка на владельца бота
+if (normalizedWho.split('@')[0] === botOwnerId.split('@')[0]) {
+    await sock.sendMessage(chatId, { 
+        text: '❌ Нельзя замутить владельца бота',
+        mentions: [normalizedWho]
+    }, { quoted: message });
+    return;
+}
+
+// 3. Проверка на самого себя
+if (normalizedWho === senderId) {
+    await sock.sendMessage(chatId, { 
+        text: '❌ Нельзя замутить самого себя',
+        mentions: [normalizedWho]
+    }, { quoted: message });
+    return;
+}
         const text = message.message?.conversation || 
                      message.message?.extendedTextMessage?.text || '';
         
