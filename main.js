@@ -1607,12 +1607,71 @@ case userMessage === '.браки': {
                 await reactionsLib.addCommandReaction(sock, message);
             }
         }
-    } catch (error) {
-        console.error('❌ Error in message handler:', error.message);
-        if (chatId) {
-            await sock.sendMessage(chatId, {
-                text: '❌ Failed to process command!',
-            });
+   } catch (error) {
+        if (error instanceof Error) {
+            console.error(`Error Name: ${error.name}`);
+            console.error(`Error Message: ${error.message}`);
+            console.error(`Stack Trace:`);
+            console.error(error.stack);
+        } else {
+            console.error(`Unknown Error Type:`, error);
+        }
+        
+        try {
+            const errorContext = {
+                hasMessageUpdate: !!messageUpdate,
+                hasMessages: !!messageUpdate?.messages,
+                messageCount: messageUpdate?.messages?.length || 0,
+                updateType: messageUpdate?.type,
+                chatId: messageUpdate?.messages?.[0]?.key?.remoteJid || message?.key?.remoteJid || 'unknown',
+                sender: messageUpdate?.messages?.[0]?.key?.participant || 
+                        messageUpdate?.messages?.[0]?.key?.remoteJid || 
+                        message?.key?.participant || 
+                        message?.key?.remoteJid || 
+                        'unknown',
+                isGroup: (messageUpdate?.messages?.[0]?.key?.remoteJid || message?.key?.remoteJid || '').endsWith('@g.us'),
+                messageType: message?.message ? Object.keys(message.message)[0] : 'unknown',
+                command: userMessage || 'no command',
+                timestamp: new Date().toISOString()
+            };
+            
+            console.error('\nContext:');
+            console.error(JSON.stringify(errorContext, null, 2));
+        } catch (contextError) {
+            console.error('Failed to gather error context:', contextError.message);
+        }
+
+        let errorChatId;
+        
+        try {
+            if (messageUpdate?.messages?.[0]?.key?.remoteJid) {
+                errorChatId = messageUpdate.messages[0].key.remoteJid;
+            } else if (message?.key?.remoteJid) {
+                errorChatId = message.key.remoteJid;
+            }
+        } catch (e) {
+            console.error('Failed to extract chat ID:', e.message);
+        }
+        
+        if (errorChatId && sock) {
+            try {
+                let errorMessage = '😭 Произошла ошибка при выполнении команды\n> обратитесь в поддержку wa.me/79292991077 и подробно опишите проблему.';
+                
+                if (error instanceof Error) {
+                    errorMessage += `\n\n> ${error.name}: ${error.message}`;
+                } else if (typeof error === 'string') {
+                    errorMessage = error;
+                }
+                
+                await sock.sendMessage(errorChatId, {
+                    text: errorMessage,
+                });
+            } catch (sendError) {
+                console.error(`Error: ${sendError.message}`);
+                console.error(`Chat ID: ${errorChatId}`);
+            }
+        } else {
+            console.error('⚠️ Cannot send error message: Chat ID or socket not available');
         }
     }
 }

@@ -1,133 +1,101 @@
-const isAdmin = require('../lib/isAdmin');
+const isAdmin = require('../lib/isAdmin')
 
-// Function to handle manual promotions via command
+const sleep = ms => new Promise(r => setTimeout(r, ms))
+
 async function promoteCommand(sock, chatId, mentionedJids, message) {
     try {
-        // First check if it's a group
         if (!chatId.endsWith('@g.us')) {
-            await sock.sendMessage(chatId, { 
-                text: 'This command can only be used in groups!'
-            });
-            return;
+            return sock.sendMessage(chatId, {
+                text: 'Эта команда работает только в группах.'
+            })
         }
 
-        // Check admin status first
-        try {
-            const adminStatus = await isAdmin(sock, chatId, message.key.participant || message.key.remoteJid);
-            
-            if (!adminStatus.isBotAdmin) {
-                await sock.sendMessage(chatId, { 
-                    text: '❌ Error: Please make the bot an admin first to use this command.'
-                });
-                return;
-            }
+        const sender = message.key.participant || message.key.remoteJid
+        const adminStatus = await isAdmin(sock, chatId, sender)
 
-            if (!adminStatus.isSenderAdmin) {
-                await sock.sendMessage(chatId, { 
-                    text: 'Только в группах можно использовать эту команду'
-                });
-                return;
-            }
-        } catch (adminError) {
-            console.error('Error checking admin status:', adminError);
-            await sock.sendMessage(chatId, { 
-                text: 'Сделайте бота админом чтобы он смог выполнить эту команду'
-            });
-            return;
+        if (!adminStatus.isBotAdmin) {
+            return sock.sendMessage(chatId, {
+                text: '❌ Сначала нужно выдать боту права администратора.'
+            })
         }
 
-        let userToPromote = [];
-        
-        // Check for mentioned users
-        if (mentionedJids && mentionedJids.length > 0) {
-            userToPromote = mentionedJids;
-        }
-        // Check for replied message
-        else if (message.message?.extendedTextMessage?.contextInfo?.participant) {
-            userToPromote = [message.message.extendedTextMessage.contextInfo.participant];
-        }
-        
-        // If no user found through either method
-        if (userToPromote.length === 0) {
-            await sock.sendMessage(chatId, { 
-                text: 'Ответьте на сообщение участника чата чтобы повысить его'
-            });
-            return;
+        if (!adminStatus.isSenderAdmin) {
+            return sock.sendMessage(chatId, {
+                text: '❌ Только администраторы группы могут использовать эту команду.'
+            })
         }
 
-        // Add delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        let users = []
 
-        await sock.groupParticipantsUpdate(chatId, userToPromote, "promote");
-        
-        // Add delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        // Simple format like in the example
-        const senderJid = message.key.participant || message.key.remoteJid;
-        const promotedJid = userToPromote[0];
-        
-        await sock.sendMessage(chatId, { 
-            text: `🔼 *Повышение*\n👤 Админ @${senderJid.split('@')[0]}, повысил участника @${promotedJid.split('@')[0]}`,
-            mentions: [senderJid, promotedJid]
-        });
-    } catch (error) {
-        console.error('Error in promote command:', error);
-        if (error.data === 429) {
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            try {
-                await sock.sendMessage(chatId, { 
-                    text: '❌ Rate limit reached. Please try again in a few seconds.'
-                });
-            } catch (retryError) {
-                console.error('Error sending retry message:', retryError);
-            }
+        if (mentionedJids?.length) {
+            users = mentionedJids
         } else {
-            try {
-                await sock.sendMessage(chatId, { 
-                    text: '❌ Failed to promote user(s). Make sure the bot is admin and has sufficient permissions.'
-                });
-            } catch (sendError) {
-                console.error('Error sending error message:', sendError);
-            }
+            const replyUser = message.message?.extendedTextMessage?.contextInfo?.participant
+            if (replyUser) users = [replyUser]
         }
+
+        if (!users.length) {
+            return sock.sendMessage(chatId, {
+                text: '❌ Нужно отметить участника или ответить на его сообщение.'
+            })
+        }
+
+        await sleep(1000)
+        await sock.groupParticipantsUpdate(chatId, users, 'promote')
+        await sleep(1000)
+
+    } catch (e) {
+        console.error('promote error:', e)
+
+        if (e?.data === 429) {
+            await sleep(2000)
+            return sock.sendMessage(chatId, {
+                text: '❌ Превышен лимит запросов. Попробуйте через несколько секунд.'
+            })
+        }
+
+        return sock.sendMessage(chatId, {
+            text: '❌ Не удалось назначить администратора. Проверьте права бота.'
+        })
     }
 }
 
-// Function to handle automatic promotion detection
 async function handlePromotionEvent(sock, groupId, participants, author) {
     try {
-        // Safety check for participants
-        if (!Array.isArray(participants) || participants.length === 0) {
-            return;
-        }
+        if (!Array.isArray(participants) || !participants.length) return
 
-        // Add delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await sleep(1000)
 
-        const botId = sock.user.jid;
-        const promotedJid = typeof participants[0] === 'string' ? participants[0] : (participants[0].id || participants[0].toString());
-        const authorJid = author && author.length > 0 ? (typeof author === 'string' ? author : (author.id || author.toString())) : null;
+        const botId = sock.user.jid
+        const promoted = typeof participants[0] === 'string'
+            ? participants[0]
+            : participants[0].id || participants[0].toString()
 
-        // Check if bot was promoted
-        if (promotedJid === botId) {
-            await sock.sendMessage(groupId, {
-                text: `🎉 Бот назначен администратором!\n👤 Назначил: @${authorJid ? authorJid.split('@')[0] : 'System'}`,
+        const authorJid = author
+            ? typeof author === 'string'
+                ? author
+                : author.id || author.toString()
+            : null
+
+        const authorName = authorJid ? authorJid.split('@')[0] : 'Система'
+        const promotedName = promoted.split('@')[0]
+
+        if (promoted === botId) {
+            return sock.sendMessage(groupId, {
+                text: `🎉 Бота назначили администратором.\n👤 Назначил: @${authorName}`,
                 mentions: authorJid ? [authorJid] : []
-            });
-        } else {
-            // Regular user promotion
-            await sock.sendMessage(groupId, {
-                text: `🔼 *Повышение*\n👤 Админ @${authorJid ? authorJid.split('@')[0] : 'System'}, повысил участника @${promotedJid.split('@')[0]}`,
-                mentions: authorJid ? [authorJid, promotedJid] : [promotedJid]
-            });
+            })
         }
-    } catch (error) {
-        console.error('Error handling promotion event:', error);
-        if (error.data === 429) {
-            await new Promise(resolve => setTimeout(resolve, 2000));
-        }
+
+        return sock.sendMessage(groupId, {
+            text: `🔼 Повышение\n👤 @${authorName} назначил администратором @${promotedName}`,
+            mentions: authorJid ? [authorJid, promoted] : [promoted]
+        })
+
+    } catch (e) {
+        console.error('promotion event error:', e)
+        if (e?.data === 429) await sleep(2000)
     }
 }
 
-module.exports = { promoteCommand, handlePromotionEvent };
+module.exports = { promoteCommand, handlePromotionEvent }
