@@ -1708,14 +1708,14 @@ async function handleGroupParticipantUpdate(sock, update) {
             if (typeof modeData.isPublic === 'boolean') isPublic = modeData.isPublic;
         } catch (e) {}
 
-        if (action === 'promote') {
-            if (!isPublic) return;
-            const promoteCmd = getCommand('promote');
-            if (promoteCmd?.handlePromotionEvent) {
-                await promoteCmd.handlePromotionEvent(sock, id, participants, author);
-            }
-            return;
-        }
+        // if (action === 'promote') {
+        //     if (!isPublic) return;
+        //     const promoteCmd = getCommand('promote');
+        //     if (promoteCmd?.handlePromotionEvent) {
+        //         await promoteCmd.handlePromotionEvent(sock, id, participants, author);
+        //     }
+        //     return;
+        // }
 
         if (action === 'demote') {
             if (!isPublic) return;
