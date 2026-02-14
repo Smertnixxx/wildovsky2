@@ -427,6 +427,67 @@ if (userMessage === 'давай вп' && !isGroup) {
     }
     return; 
 }
+
+if (userMessage.startsWith('бот кто')) {
+    if (!isGroup) return; // Только в группах
+    
+    const inputText = rawText.slice('бот кто'.length).trim();
+    if (!inputText) {
+        await sock.sendMessage(chatId, { 
+            text: 'Укажи текст после команды\nПример: бот кто красавчик?' 
+        }, { quoted: message });
+        return;
+    }
+    
+    try {
+        const groupMeta = await sock.groupMetadata(chatId);
+        const participants = groupMeta.participants || [];
+        
+        if (participants.length < 2) {
+            await sock.sendMessage(chatId, { 
+                text: 'В группе слишком мало участников' 
+            }, { quoted: message });
+            return;
+        }
+        
+        // Выбираем случайного участника (не отправителя)
+        let randomUser;
+        do {
+            randomUser = participants[Math.floor(Math.random() * participants.length)];
+        } while (randomUser.id === senderId && participants.length > 1);
+        
+        // Получаем имя
+        const userName = await getDisplayName(sock, randomUser.id);
+        
+        // Случайные фразы
+        const phrases = [
+            '🤔 Я думаю, что',
+            '🔭 Звезды говорят, что',
+            '☝ Я уверен, что',
+            '🔮 Ясно вижу, что',
+            '💡 Мне кажется, что',
+            '🎯 Точно знаю, что',
+            '🌟 Очевидно, что',
+            '🎲 Выпало, что'
+        ];
+        
+        const phrase = phrases[Math.floor(Math.random() * phrases.length)];
+        
+        // Отправляем с упоминанием
+        await sock.sendMessage(chatId, {
+            text: `${phrase} @${randomUser.id.split('@')[0]} ${inputText}`,
+            mentions: [randomUser.id]
+        }, { quoted: message });
+        
+    } catch (e) {
+        console.error('Ошибка в "бот кто":', e);
+        await sock.sendMessage(chatId, { 
+            text: 'Произошла ошибка' 
+        }, { quoted: message });
+    }
+    
+    return; 
+}
 // ==================================================================
 
         if (!userMessage.startsWith('.')) {
