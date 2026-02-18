@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const getDisplayName = require('../lib/getDisplayName');
+const { getGroupMetadata } = require('../lib/groupMetadataQueue');
 const dataFilePath = path.join(__dirname, '..', 'data', 'messageCount.json');
 
 function loadMessageCounts() {
@@ -15,21 +16,21 @@ async function profileCommand(sock, chatId, message) {
         const senderId = message.key.participant || message.key.remoteJid;
         const name = await getDisplayName(sock, senderId);
 
-
         const messageCounts = loadMessageCounts();
-        const userMessages =
-            messageCounts[chatId]?.[senderId] || 0;
+        const userMessages = messageCounts[chatId]?.[senderId] || 0;
 
         let role = 'Участник';
 
         if (chatId.endsWith('@g.us')) {
-            const meta = await sock.groupMetadata(chatId);
-            const participant = meta.participants.find(p => p.id === senderId);
-
-            if (participant?.admin === 'superadmin') {
-                role = 'Владелец';
-            } else if (participant?.admin === 'admin') {
-                role = 'Админ';
+            // Через единую очередь!
+            const meta = await getGroupMetadata(sock, chatId);
+            if (meta) {
+                const participant = (meta.participants || []).find(p => p.id === senderId);
+                if (participant?.admin === 'superadmin') {
+                    role = 'Владелец';
+                } else if (participant?.admin === 'admin') {
+                    role = 'Админ';
+                }
             }
         }
 
@@ -50,11 +51,11 @@ async function profileCommand(sock, chatId, message) {
 👤 Роль: ${role}${marriageLine}
         `.trim();
 
-        await sock.sendMessage(chatId,{ text: profile}, {quoted: message});
+        await sock.sendMessage(chatId, { text: profile }, { quoted: message });
 
     } catch (e) {
         console.error(e);
-        await sock.sendMessage(chatId, { text: 'ошибка при получении профиля' }, {quoted: message});
+        await sock.sendMessage(chatId, { text: 'ошибка при получении профиля' }, { quoted: message });
     }
 }
 

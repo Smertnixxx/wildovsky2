@@ -239,13 +239,27 @@ async function startXeonBotInc() {
     }
 
 
+    const { getCached, getGroupMetadata: getGroupMeta } = require('./lib/groupMetadataQueue')
+
     XeonBotInc.getName = (jid, withoutContact = false) => {
         id = XeonBotInc.decodeJid(jid)
         withoutContact = XeonBotInc.withoutContact || withoutContact
         let v
         if (id.endsWith("@g.us")) return new Promise(async (resolve) => {
             v = store.contacts[id] || {}
-            if (!(v.name || v.subject)) v = XeonBotInc.groupMetadata(id) || {}
+            if (!(v.name || v.subject)) {
+                const cached = getCached(id)
+                if (cached) {
+                    v = cached
+                } else {
+                    try {
+                        const meta = await getGroupMeta(XeonBotInc, id)
+                        v = meta || {}
+                    } catch (e) {
+                        v = {}
+                    }
+                }
+            }
             resolve(v.name || v.subject || PhoneNumber('+' + id.replace('@s.whatsapp.net', '')).getNumber('international'))
         })
         else v = id === '0@s.whatsapp.net' ? {
