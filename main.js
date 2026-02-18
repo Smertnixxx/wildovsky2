@@ -366,14 +366,14 @@ async function handleMessages(sock, messageUpdate, printLog) {
             return;
         }
 
-        // Handle game moves
-        if (/^[1-9]$/.test(userMessage) || userMessage.toLowerCase() === 'сдаться') {
-            const tttCmd = getCommand('tictactoe');
-            if (tttCmd?.handleTicTacToeMove) {
-                await tttCmd.handleTicTacToeMove(sock, chatId, senderId, userMessage);
-            }
-            return;
-        }
+// Handle game moves
+if (/^[1-9]$/.test(userMessage)) {
+    const tttCmd = getCommand('tictactoe');
+    if (tttCmd?.handleTicTacToeMove) {
+        await tttCmd.handleTicTacToeMove(sock, chatId, senderId, userMessage);
+    }
+    return;
+}
 
         // Increment message count
         if (!message.key.fromMe) {
@@ -450,13 +450,12 @@ if (userMessage.startsWith('бот кто')) {
             return;
         }
         
-        // Выбираем случайного участника (не отправителя)
+
         let randomUser;
         do {
             randomUser = participants[Math.floor(Math.random() * participants.length)];
         } while (randomUser.id === senderId && participants.length > 1);
         
-        // Получаем имя
         const userName = await getDisplayName(sock, randomUser.id);
         
         // Случайные фразы
@@ -924,15 +923,24 @@ case userMessage.startsWith('.antilink'): {
                 break;
             }
 
-            case userMessage.startsWith('.ttt'):
-            case userMessage.startsWith('.tictactoe'): {
-                const tttText = userMessage.split(' ').slice(1).join(' ');
-                const tictactoeCmd = getCommand('tictactoe');
-                if (tictactoeCmd?.tictactoeCommand) {
-                    await tictactoeCmd.tictactoeCommand(sock, chatId, senderId, tttText);
-                }
-                break;
-            }
+case userMessage.startsWith('.тиктак'):
+case userMessage.startsWith('.ttt'):
+case userMessage.startsWith('.кн'): {
+    const tttText = rawText.split(' ').slice(1).join(' ');
+    const tictactoeCmd = getCommand('tictactoe');
+    if (tictactoeCmd?.tictactoeCommand) {
+        await tictactoeCmd.tictactoeCommand(sock, chatId, senderId, tttText);
+    }
+    break;
+}
+
+case userMessage === '.разтиктак': {
+    const tictactoeCmd = getCommand('tictactoe');
+    if (tictactoeCmd?.endTicTacToeCommand) {
+        await tictactoeCmd.endTicTacToeCommand(sock, chatId, senderId);
+    }
+    break;
+}
 
             case userMessage === '.topmembers':
             case userMessage.startsWith('.сообщения'): {
@@ -1343,14 +1351,6 @@ case userMessage === '.браки': {
                 break;
             }
 
-            case userMessage === '.сдаться': {
-                const tttCmd = getCommand('tictactoe');
-                if (tttCmd?.handleTicTacToeMove) {
-                    await tttCmd.handleTicTacToeMove(sock, chatId, senderId, 'сдаться');
-                }
-                break;
-            }
-
             case userMessage === '.cleartmp': {
                 const clearTmpCommand = getCommand('cleartmp');
                 if (clearTmpCommand) await clearTmpCommand(sock, chatId, message);
@@ -1744,16 +1744,99 @@ async function handleGroupParticipantUpdate(sock, update) {
         if (!id.endsWith('@g.us')) return;
         
         try {
-            const who = (participants && participants.join ? participants.join(',') : participants) || '';
-            const [authorName, groupName] = await Promise.all([
-                getDisplayName(sock, author),
-                getDisplayName(sock, id)
-            ]);
+            const normalizedParticipants = Array.isArray(participants) 
+                ? participants.map(p => typeof p === 'string' ? p : (p?.id || p?.jid || String(p)))
+                : [];
+
+            const participantNames = await Promise.all(
+                normalizedParticipants.map(async (participant) => {
+                    try {
+                        const name = await getDisplayName(sock, participant);
+                        return name || participant.split('@')[0];
+                    } catch (e) {
+                        return participant.split('@')[0];
+                    }
+                })
+            );
+
+            const authorName = author 
+                ? await getDisplayName(sock, author).catch(() => author.split('@')[0])
+                : null;
+
+            let groupName = '';
+            try {
+                const groupMetadata = await sock.groupMetadata(id);
+                groupName = groupMetadata.subject || id.split('@')[0];
+            } catch (e) {
+                groupName = await getDisplayName(sock, id).catch(() => id.split('@')[0]);
+            }
+
+            // ANSI цветовые коды
+            const colors = {
+                reset: '\x1b[0m',
+                red: '\x1b[31m',
+                green: '\x1b[32m',
+                yellow: '\x1b[33m',
+                blue: '\x1b[34m',
+                cyan: '\x1b[36m',
+                white: '\x1b[37m',
+                gray: '\x1b[90m'
+            };
+
+            let logMessage = '';
+            let icon = '';
+            let iconColor = '';
+
+            switch(action) {
+                case 'add':
+                    icon = '[+]';
+                    iconColor = colors.green;
+                    if (author) {
+                        logMessage = `\n\n${iconColor}${icon}${colors.reset} ${participantNames.join(', ')} ${colors.gray}added by${colors.reset} ${authorName}\n\n`;
+                    } else {
+                        logMessage = `\n\n${iconColor}${icon}${colors.reset} ${participantNames.join(', ')} ${colors.gray}joined via link${colors.reset}\n\n`;
+                    }
+                    break;
+
+                case 'remove':
+                    icon = '[-]';
+                    iconColor = colors.red;
+                    if (author && normalizedParticipants.includes(author)) {
+                        logMessage = `\n\n${iconColor}${icon}${colors.reset} ${participantNames.join(', ')} ${colors.gray}left${colors.reset}\n\n`;
+                    } else if (author) {
+                        logMessage = `\n\n${iconColor}${icon}${colors.reset} ${participantNames.join(', ')} ${colors.gray}removed by${colors.reset} ${authorName}\n\n`;
+                    } else {
+                        logMessage = `\n\n${iconColor}${icon}${colors.reset} ${participantNames.join(', ')} ${colors.gray}left${colors.reset}\n\n`;
+                    }
+                    break;
+
+                case 'promote':
+                    icon = '[^]';
+                    iconColor = colors.cyan;
+                    logMessage = `\n\n${iconColor}${icon}${colors.reset} ${participantNames.join(', ')} ${colors.gray}promoted by${colors.reset} ${authorName}\n\n`;
+                    break;
+
+                case 'demote':
+                    icon = '[v]';
+                    iconColor = colors.yellow;
+                    logMessage = `\n\n${iconColor}${icon}${colors.reset} ${participantNames.join(', ')} ${colors.gray}demoted by${colors.reset} ${authorName}\n\n`;
+                    break;
+
+                default:
+                    icon = '[?]';
+                    iconColor = colors.blue;
+                    logMessage = `\n\n${iconColor}${icon}${colors.reset} ${action}: ${participantNames.join(', ')}\n\n`;
+            }
+
+            console.log(logMessage);
+
+            let plainMessage = '';
+        
             logDetailed({
                 isCommand: false,
-                text: `Group event: ${action} ${who} by ${authorName || (author || 'unknown')}`,
+                text: plainMessage,
                 sender: author || '',
-                senderName: authorName,
+                senderName: authorName || '',
                 chat: id,
                 chatName: groupName,
                 chatIsGroup: true,
@@ -1761,7 +1844,10 @@ async function handleGroupParticipantUpdate(sock, update) {
                 isBanned: false,
                 isBotSender: false
             });
-        } catch (e) {}
+
+        } catch (e) {
+            console.error('Error in logging group event:', e);
+        }
 
         let isPublic = true;
         try {
@@ -1791,6 +1877,13 @@ async function handleGroupParticipantUpdate(sock, update) {
             const welcomeCmd = getCommand('welcome');
             if (welcomeCmd?.handleJoinEvent) {
                 await welcomeCmd.handleJoinEvent(sock, id, participants);
+            }
+        }
+
+        if (action === 'remove') {
+            const goodbyeCmd = getCommand('goodbye');
+            if (goodbyeCmd?.handleLeaveEvent) {
+                await goodbyeCmd.handleLeaveEvent(sock, id, participants);
             }
         }
     } catch (error) {
