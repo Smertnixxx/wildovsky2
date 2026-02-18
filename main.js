@@ -366,13 +366,14 @@ async function handleMessages(sock, messageUpdate, printLog) {
             return;
         }
 
-// Handle game moves
-if (/^[1-9]$/.test(userMessage)) {
+// Handle game moves AND surrender
+if (/^[1-9]$/.test(userMessage) || /^(сдаться|сдаюсь|surrender|give\s*up)$/i.test(userMessage)) {
     const tttCmd = getCommand('tictactoe');
     if (tttCmd?.handleTicTacToeMove) {
         await tttCmd.handleTicTacToeMove(sock, chatId, senderId, userMessage);
     }
-    return;
+    // Не делаем return для "сдаться", если игра не найдена — пусть идёт дальше
+    if (/^[1-9]$/.test(userMessage)) return;
 }
 
         // Increment message count
@@ -934,61 +935,11 @@ case userMessage.startsWith('.кн'): {
     break;
 }
 
-case userMessage === '.разтиктак': {
-    const tictactoeCmd = getCommand('tictactoe');
-    if (tictactoeCmd?.endTicTacToeCommand) {
-        await tictactoeCmd.endTicTacToeCommand(sock, chatId, senderId);
-    }
-    break;
-}
-
             case userMessage === '.topmembers':
             case userMessage.startsWith('.сообщения'): {
                 const topMembersCmd = getCommand('topmembers');
                 if (topMembersCmd?.topMembers) {
                     topMembersCmd.topMembers(sock, chatId, isGroup);
-                }
-                break;
-            }
-
-            case userMessage.startsWith('.hangman'): {
-                const hangmanCmd = getCommand('hangman');
-                if (hangmanCmd?.startHangman) {
-                    hangmanCmd.startHangman(sock, chatId);
-                }
-                break;
-            }
-
-            case userMessage.startsWith('.guess'): {
-                const guessedLetter = userMessage.split(' ')[1];
-                const hangmanCmd = getCommand('hangman');
-                if (guessedLetter && hangmanCmd?.guessLetter) {
-                    hangmanCmd.guessLetter(sock, chatId, guessedLetter);
-                } else {
-                    sock.sendMessage(chatId, { 
-                        text: 'Please guess a letter using .guess <letter>' 
-                    }, { quoted: message });
-                }
-                break;
-            }
-
-            case userMessage.startsWith('.trivia'): {
-                const triviaCmd = getCommand('trivia');
-                if (triviaCmd?.startTrivia) {
-                    triviaCmd.startTrivia(sock, chatId);
-                }
-                break;
-            }
-
-            case userMessage.startsWith('.answer'): {
-                const answer = userMessage.split(' ').slice(1).join(' ');
-                const triviaCmd = getCommand('trivia');
-                if (answer && triviaCmd?.answerTrivia) {
-                    triviaCmd.answerTrivia(sock, chatId, answer);
-                } else {
-                    sock.sendMessage(chatId, { 
-                        text: 'Please provide an answer using .answer <answer>' 
-                    }, { quoted: message });
                 }
                 break;
             }
@@ -1000,24 +951,6 @@ case userMessage === '.разтиктак': {
     }
     break;
 }
-
-            case userMessage.startsWith('.8ball'): {
-                const question = userMessage.split(' ').slice(1).join(' ');
-                const eightBallCmd = getCommand('eightball');
-                if (eightBallCmd?.eightBallCommand) {
-                    await eightBallCmd.eightBallCommand(sock, chatId, question);
-                }
-                break;
-            }
-
-
-            case userMessage === '.dare': {
-                const dareCmd = getCommand('dare');
-                if (dareCmd?.dareCommand) {
-                    await dareCmd.dareCommand(sock, chatId, message);
-                }
-                break;
-            }
 
             case userMessage === '.clear': {
                 if (isGroup) {
@@ -1199,14 +1132,6 @@ case userMessage.startsWith('.котик'): {
                 const chatbotCmd = getCommand('chatbot');
                 if (chatbotCmd?.handleChatbotCommand) {
                     await chatbotCmd.handleChatbotCommand(sock, chatId, message, match);
-                }
-                break;
-            }
-
-            case userMessage === '.flirt': {
-                const flirtCmd = getCommand('flirt');
-                if (flirtCmd?.flirtCommand) {
-                    await flirtCmd.flirtCommand(sock, chatId, message);
                 }
                 break;
             }
@@ -1542,12 +1467,7 @@ case userMessage === '.браки': {
                 }
                 break;
             }
-
-            // ============================================
-            // 🎌 ANIME REACTIONS - РАСШИРЕННАЯ ВЕРСИЯ
-            // ============================================
             case userMessage.startsWith('.animu'):
-            // Основные английские команды:
             case userMessage.startsWith('.nom'):
             case userMessage.startsWith('.poke'):
             case userMessage.startsWith('.cry'):
