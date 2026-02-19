@@ -212,6 +212,33 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
         const message = messages[0];
         if (!message?.message) return;
+      // дамп реакции в чат
+if (message.message?.reactionMessage) {
+    const chatId = message.key.remoteJid;
+    const reaction = message.message.reactionMessage;
+
+    const dump = stringify({
+        senderKey: message.key,
+        reactionMessage: reaction,
+        innerKey: reaction.key,
+        text: reaction.text,
+        senderTimestampMs: reaction.senderTimestampMs,
+        groupingKey: reaction.groupingKey ?? null,
+        fullMessage: message.message
+    });
+
+    const maxChunk = 4000;
+    for (let i = 0; i < dump.length; i += maxChunk) {
+        const chunk = dump.slice(i, i + maxChunk);
+        const msg = generateWAMessageFromContent(chatId, {
+            extendedTextMessage: proto.Message.ExtendedTextMessage.create({
+                text: chunk
+            })
+        }, {});
+        await sock.relayMessage(chatId, msg.message, { messageId: msg.key.id }).catch(console.error);
+    }
+    return;
+}
 const autoreactGroup = getCommand('autoreactgroup');
 if (autoreactGroup?.react) autoreactGroup.react(sock, message);
         const chatId = message.key.remoteJid;
