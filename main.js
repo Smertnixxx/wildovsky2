@@ -833,6 +833,18 @@ case userMessage === '.exec': {
                 if (botinfoCommand) await botinfoCommand(sock, chatId, senderId, message);
                 break;
             }
+            case userMessage.startsWith('.vse'): {
+    if (!isGroup) {
+        await sock.sendMessage(chatId, {
+            text: 'Эту команду можно использовать только в группах.',
+        }, { quoted: message });
+        return;
+    }
+    const text = rawText.split(' ').slice(1).join(' ').trim();
+    const vseCmd = getCommand('vse');
+    if (vseCmd) await vseCmd(sock, chatId, message, text);
+    break;
+}
              case userMessage.startsWith('.все'):
             case userMessage.startsWith('#вызов'):
             case userMessage.startsWith('#все'):
