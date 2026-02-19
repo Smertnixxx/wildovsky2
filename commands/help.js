@@ -30,6 +30,7 @@ async function helpCommand(sock, chatId, message) {
             rows: [
                 { title: ".разработчик", description: "Информация о разработчике", id: "cmd_dev" },
                 { title: ".пинг", description: "Проверка скорости отклика бота", id: "cmd_ping" },
+                { title: ".гид (ссылка на группу)", description: "Показывает информацию о группе по ссылке", id: "cmd_ping" },
                 { title: ".поиск", description: "Ищет картинки по вашему запросу в интернете", id: "cmd_ping" },
                 { title: ".котик", description: "Отправляет случайную картинку котика", id: "cmd_ping" },
                 { title: ".ttt", description: "Крестики-нолики", id: "cmd_ttt" }

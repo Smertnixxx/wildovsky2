@@ -1196,6 +1196,15 @@ case userMessage === '.браки': {
     break;
 }
 
+case userMessage.startsWith('.getgroupid'):
+case userMessage.startsWith('.groupid'):
+case userMessage.startsWith('.gid'):
+case userMessage.startsWith('.гид'): {
+    const getGroupIdCmd = getCommand('getgroupid');
+    if (getGroupIdCmd) await getGroupIdCmd(sock, chatId, message);
+    break;
+}
+
 
             case userMessage.startsWith('.развод'):
             case userMessage.startsWith('.расстаться'):
