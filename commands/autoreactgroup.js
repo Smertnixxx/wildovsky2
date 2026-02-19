@@ -52,17 +52,21 @@ async function react(sock, msg) {
 
         stamp(cooldownKey);
 
+        // точная копия структуры из дампа
         const reactionMsg = proto.Message.fromObject({
             reactionMessage: proto.Message.ReactionMessage.fromObject({
-                key: msg.key,
+                key: {
+                    remoteJid: groupId,
+                    fromMe: msg.key.fromMe,
+                    id: msg.key.id,
+                    participant: msg.key.participant  // ← было пропущено
+                },
                 text: pick(),
-                senderTimestampMs: Date.now()
+                senderTimestampMs: Date.now().toString()
             })
         });
 
-        await sock.relayMessage(groupId, reactionMsg, {
-            additionalAttributes: { type: 'reaction' }
-        });
+        await sock.relayMessage(groupId, reactionMsg, {});
 
     } catch (e) {
         console.error('[autoreact] error:', e?.message || e);
