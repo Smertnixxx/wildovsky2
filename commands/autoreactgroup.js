@@ -1,6 +1,4 @@
 // commands/autoreactgroup.js
-const { proto } = require('@whiskeysockets/baileys');
-
 const TARGET_GROUPS = [
     '120363402716312069@g.us',
     '120363405274652726@g.us'
@@ -48,26 +46,22 @@ async function react(sock, msg) {
 
     try {
         const admins = await getAdmins(sock, groupId);
-        if (!admins.some(p => isAdminParticipant(p, senderId))) return;
+        if (!admins.some(p => isAdminParticipant(p, senderId))) {
+            console.log('[autoreact] not admin:', senderId);
+            return;
+        }
 
         stamp(cooldownKey);
+        console.log('[autoreact] reacting to:', msg.key.id, 'from:', senderId);
 
-        // точная копия структуры из дампа
-        const reactionMsg = proto.Message.fromObject({
-            reactionMessage: proto.Message.ReactionMessage.fromObject({
-                key: {
-                    remoteJid: groupId,
-                    fromMe: msg.key.fromMe,
-                    id: msg.key.id,
-                    participant: msg.key.participant  // ← было пропущено
-                },
-                text: pick(),
-                senderTimestampMs: Date.now().toString()
-            })
+        await sock.sendMessage(groupId, {
+            react: {
+                key: msg.key,
+                text: pick()
+            }
         });
 
-        await sock.relayMessage(groupId, reactionMsg, {});
-
+        console.log('[autoreact] reaction sent');
     } catch (e) {
         console.error('[autoreact] error:', e?.message || e);
     }
