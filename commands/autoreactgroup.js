@@ -3,6 +3,7 @@ const { proto } = require('@whiskeysockets/baileys');
 
 const TARGET_GROUPS = [
     '120363402716312069@g.us',
+    '120363328977364931@g.us',
     '120363405274652726@g.us'
 ];
 
