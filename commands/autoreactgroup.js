@@ -1,4 +1,6 @@
 // commands/autoreactgroup.js
+const { proto } = require('@whiskeysockets/baileys');
+
 const TARGET_GROUPS = [
     '120363402716312069@g.us',
     '120363328977364931@g.us',
@@ -47,22 +49,23 @@ async function react(sock, msg) {
 
     try {
         const admins = await getAdmins(sock, groupId);
-        if (!admins.some(p => isAdminParticipant(p, senderId))) {
-            console.log('[autoreact] not admin:', senderId);
-            return;
-        }
+        if (!admins.some(p => isAdminParticipant(p, senderId))) return;
 
         stamp(cooldownKey);
-        console.log('[autoreact] reacting to:', msg.key.id, 'from:', senderId);
 
-        await sock.sendMessage(groupId, {
-            react: {
+        const reactionMsg = proto.Message.fromObject({
+            reactionMessage: proto.Message.ReactionMessage.fromObject({
                 key: msg.key,
-                text: pick()
-            }
+                text: pick(),
+                senderTimestampMs: Date.now()
+            })
         });
 
-        console.log('[autoreact] reaction sent');
+        // type: 'reaction' — именно это позволяет обойти ограничение закрытой группы
+        await sock.relayMessage(groupId, reactionMsg, {
+            additionalAttributes: { type: 'reaction' }
+        });
+
     } catch (e) {
         console.error('[autoreact] error:', e?.message || e);
     }
