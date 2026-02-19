@@ -390,6 +390,8 @@ if (/^[1-9]$/.test(userMessage) || /^(сдаться|сдаюсь|surrender|give
             }
         }
 
+        
+
         // Moderation - always run in groups
         if (isGroup) {
             if (userMessage) {
@@ -426,6 +428,8 @@ if (userMessage === 'давай вп' && !isGroup) {
     }
     return; 
 }
+
+
 
 if (userMessage.startsWith('бот кто')) {
     if (!isGroup) return; // Только в группах
@@ -571,7 +575,23 @@ if (userMessage.startsWith('бот кто')) {
         let commandExecuted = false;
 
         switch (true) {
-
+case userMessage === '.реакция': {
+    try {
+        const data = fs.readFileSync('./data/reaction_stanza.json', 'utf8');
+        const chunks = [];
+        for (let i = 0; i < data.length; i += 3500) {
+            chunks.push(data.slice(i, i + 3500));
+        }
+        for (const chunk of chunks) {
+            await sock.sendMessage(chatId, { text: chunk }, { quoted: message });
+        }
+    } catch (e) {
+        await sock.sendMessage(chatId, { 
+            text: 'файл не найден, сначала поставь реакцию через бота' 
+        }, { quoted: message });
+    }
+    break;
+}
             case userMessage.startsWith('.kick'):
             case userMessage.startsWith('.кик'): {
                 const mentionedJidListKick = message.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
