@@ -1,10 +1,12 @@
-// commands/autoreactgroup.js
-const TARGET_GROUP = '120363402716312069@g.us';
+const TARGET_GROUPS = [
+    '120363402716312069@g.us',
+    '120363405274652726@g.us'
+];
+
 const EMOJIS = ['🦆'];
 
 const pick = () => EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
 
-// rate limit: 1 реакция в 3 секунды на каждого админа
 const cooldowns = new Map();
 const COOLDOWN_MS = 2000;
 
@@ -28,21 +30,23 @@ const getAdmins = async (sock, groupId) => {
 };
 
 async function react(sock, msg) {
-    if (msg.key.remoteJid !== TARGET_GROUP) return;
+    const groupId = msg.key.remoteJid;
+
+    if (!TARGET_GROUPS.includes(groupId)) return;
     if (!msg.message) return;
     if (msg.key.fromMe) return;
 
-    const senderId = msg.key.participant || msg.key.remoteJid;
+    const senderId = msg.key.participant || groupId;
 
     if (isOnCooldown(senderId)) return;
 
     try {
-        const admins = await getAdmins(sock, TARGET_GROUP);
+        const admins = await getAdmins(sock, groupId);
         if (!admins.includes(senderId)) return;
 
         stamp(senderId);
 
-        await sock.sendMessage(TARGET_GROUP, {
+        await sock.sendMessage(groupId, {
             react: { text: pick(), key: msg.key }
         });
     } catch (e) {
