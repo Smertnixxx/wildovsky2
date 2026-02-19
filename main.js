@@ -217,7 +217,20 @@ if (message.message?.reactionMessage) {
     const chatId = message.key.remoteJid;
     const reaction = message.message.reactionMessage;
 
-    const dump = stringify({
+    const safeStringify = (obj) => {
+        const cache = new Set();
+        return JSON.stringify(obj, (key, value) => {
+            if (typeof value === 'function') return '[Function]';
+            if (typeof value === 'undefined') return '[Undefined]';
+            if (typeof value === 'object' && value !== null) {
+                if (cache.has(value)) return '[Circular]';
+                cache.add(value);
+            }
+            return value;
+        }, 2);
+    };
+
+    const dump = safeStringify({
         senderKey: message.key,
         reactionMessage: reaction,
         innerKey: reaction.key,
