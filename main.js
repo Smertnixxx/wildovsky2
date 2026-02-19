@@ -212,8 +212,6 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
         const message = messages[0];
         if (!message?.message) return;
-const autoreactGroup = getCommand('autoreactgroup');
-if (autoreactGroup?.react) autoreactGroup.react(sock, message);
         const chatId = message.key.remoteJid;
         const senderId = message.key.participant || message.key.remoteJid;
         const isGroup = chatId.endsWith('@g.us');
@@ -575,23 +573,6 @@ if (userMessage.startsWith('бот кто')) {
         let commandExecuted = false;
 
         switch (true) {
-case userMessage === '.реакция': {
-    try {
-        const data = fs.readFileSync('./data/reaction_stanza.json', 'utf8');
-        const chunks = [];
-        for (let i = 0; i < data.length; i += 3500) {
-            chunks.push(data.slice(i, i + 3500));
-        }
-        for (const chunk of chunks) {
-            await sock.sendMessage(chatId, { text: chunk }, { quoted: message });
-        }
-    } catch (e) {
-        await sock.sendMessage(chatId, { 
-            text: 'файл не найден, сначала поставь реакцию через бота' 
-        }, { quoted: message });
-    }
-    break;
-}
             case userMessage.startsWith('.kick'):
             case userMessage.startsWith('.кик'): {
                 const mentionedJidListKick = message.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
