@@ -3,7 +3,6 @@ const { proto } = require('@whiskeysockets/baileys');
 
 const TARGET_GROUPS = [
     '120363402716312069@g.us',
-    '120363328977364931@g.us',
     '120363405274652726@g.us'
 ];
 
@@ -37,18 +36,6 @@ const getAdmins = async (sock, groupId) => {
     }
 };
 
-const sendReaction = async (sock, groupId, msgKey, emoji) => {
-    const reactionMsg = proto.Message.fromObject({
-        reactionMessage: proto.Message.ReactionMessage.fromObject({
-            key: msgKey,
-            text: emoji,
-            senderTimestampMs: Date.now()
-        })
-    });
-
-    await sock.relayMessage(groupId, reactionMsg, {});
-};
-
 async function react(sock, msg) {
     const groupId = msg.key.remoteJid;
     if (!TARGET_GROUPS.includes(groupId)) return;
@@ -61,12 +48,22 @@ async function react(sock, msg) {
 
     try {
         const admins = await getAdmins(sock, groupId);
-        const isAdmin = admins.some(p => isAdminParticipant(p, senderId));
-
-        if (!isAdmin) return;
+        if (!admins.some(p => isAdminParticipant(p, senderId))) return;
 
         stamp(cooldownKey);
-        await sendReaction(sock, groupId, msg.key, pick());
+
+        const reactionMsg = proto.Message.fromObject({
+            reactionMessage: proto.Message.ReactionMessage.fromObject({
+                key: msg.key,
+                text: pick(),
+                senderTimestampMs: Date.now()
+            })
+        });
+
+        await sock.relayMessage(groupId, reactionMsg, {
+            additionalAttributes: { type: 'reaction' }
+        });
+
     } catch (e) {
         console.error('[autoreact] error:', e?.message || e);
     }
