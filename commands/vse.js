@@ -24,7 +24,7 @@ async function vse(sock, chatId, msg, text) {
 
     const built = proto.Message.fromObject({
         extendedTextMessage: proto.Message.ExtendedTextMessage.fromObject({
-            text: text ? `@все ${text}` : '@все',
+            text: text ? `@all ${text}` : '@all',
             previewType: proto.Message.ExtendedTextMessage.PreviewType.NONE,
             contextInfo: proto.ContextInfo.fromObject({
                 nonJidMentions: 1
