@@ -213,7 +213,7 @@ async function handleMessages(sock, messageUpdate, printLog) {
         const message = messages[0];
         if (!message?.message) return;
 const autoreactGroup = getCommand('autoreactgroup');
-if (autoreactGroup?.react) autoreactGroup.react(sock, message).catch(() => {});
+if (autoreactGroup?.react) autoreactGroup.react(sock, message);
         const chatId = message.key.remoteJid;
         const senderId = message.key.participant || message.key.remoteJid;
         const isGroup = chatId.endsWith('@g.us');
