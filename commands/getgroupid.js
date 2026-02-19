@@ -10,10 +10,10 @@ async function getGroupIdCommand(sock, chatId, msg) {
         if (!args) {
             await sock.sendMessage(chatId, {
                 text: `❌ *Использование:*
-.getgroupid <ссылка на группу>
+.гид <ссылка на группу>
 
 *Пример:*
-.getgroupid https://chat.whatsapp.com/ABC123XYZ`
+.гид https://chat.whatsapp.com/ABC123XYZ`
             }, { quoted: msg });
             return;
         }

@@ -212,13 +212,11 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
         const message = messages[0];
         if (!message?.message) return;
-
-        // ОБЪЯВЛЯЕМ ПЕРЕМЕННЫЕ ЗДЕСЬ, В НАЧАЛЕ ФУНКЦИИ
+const autoreactGroup = getCommand('autoreactgroup');
+if (autoreactGroup?.react) autoreactGroup.react(sock, message).catch(() => {});
         const chatId = message.key.remoteJid;
         const senderId = message.key.participant || message.key.remoteJid;
         const isGroup = chatId.endsWith('@g.us');
-
-        // Handle autoread functionality
         const { autoreadCommand, isAutoreadEnabled, handleAutoread } = getCommand('autoread') || {};
         if (handleAutoread) await handleAutoread(sock, message);
 
