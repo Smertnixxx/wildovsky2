@@ -387,6 +387,15 @@ if (/^[1-9]$/.test(userMessage) || /^(сдаться|сдаюсь|surrender|give
             }
         }
 
+        // Уведомление о новом уровне клана
+if (global._clanLevelUp?.[chatId]) {
+    const { clan, newLvl } = global._clanLevelUp[chatId];
+    delete global._clanLevelUp[chatId];
+    await sock.sendMessage(chatId, {
+        text: `🎉 Клан *[${clan.tag}] ${clan.name}* достиг *${newLvl} уровня*!`
+    });
+}
+
         // Check mute
         if (isGroup) {
             const muteUserCmd = getCommand('muteuser');

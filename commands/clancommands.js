@@ -378,10 +378,7 @@ async function invite(sock, chatId, senderId, message) {
         return;
     }
     const clan = db.clans[clanId];
-    if (!canManage(clan, senderId)) {
-        await sock.sendMessage(chatId, { text: '❌ Только владелец или офицер может приглашать' }, { quoted: message });
-        return;
-    }
+
     const target = getTarget(message);
     if (!target) {
         await sock.sendMessage(chatId, { text: '❕ Упомяните пользователя' }, { quoted: message });
@@ -391,14 +388,34 @@ async function invite(sock, chatId, senderId, message) {
         await sock.sendMessage(chatId, { text: '❌ Этот пользователь уже состоит в клане' }, { quoted: message });
         return;
     }
+
+    // Если в чёрном списке — только владелец может пригласить
+    const isBlacklisted = (clan.blacklist || []).includes(target);
+    if (isBlacklisted && clan.owner !== senderId) {
+        await sock.sendMessage(chatId, {
+            text: '❌ Этот пользователь был исключён. Только владелец клана может пригласить его обратно'
+        }, { quoted: message });
+        return;
+    }
+
+    if (!canManage(clan, senderId)) {
+        await sock.sendMessage(chatId, { text: '❌ Только владелец или офицер может приглашать' }, { quoted: message });
+        return;
+    }
+
     const lvlData = lvl(clan.xp);
     if (clan.members.length >= lvlData.maxMembers) {
         await sock.sendMessage(chatId, { text: `❌ Клан заполнен (${clan.members.length}/${lvlData.maxMembers})` }, { quoted: message });
         return;
     }
+
     clan.members.push(target);
     if (!clan.membersSince) clan.membersSince = {};
     clan.membersSince[target] = Date.now();
+    // Снимаем с чёрного списка при приглашении владельцем
+    if (isBlacklisted) {
+        clan.blacklist = clan.blacklist.filter(b => b !== target);
+    }
     db.users[target] = clan.id;
     saveDb(db);
     const name = await getDisplayName(sock, target);
@@ -442,10 +459,16 @@ async function kick(sock, chatId, senderId, message) {
     clan.officers = (clan.officers || []).filter(o => o !== target);
     clan.veterans = (clan.veterans || []).filter(v => v !== target);
     if (clan.membersSince) delete clan.membersSince[target];
+    // Добавляем в чёрный список
+    if (!clan.blacklist) clan.blacklist = [];
+    if (!clan.blacklist.includes(target)) clan.blacklist.push(target);
     delete db.users[target];
     saveDb(db);
     const name = await getDisplayName(sock, target);
-    await sock.sendMessage(chatId, { text: `✅ *${name}* исключён из клана`, mentions: [target] }, { quoted: message });
+    await sock.sendMessage(chatId, {
+        text: `✅ *${name}* исключён из клана и не сможет вступить обратно без приглашения владельца`,
+        mentions: [target]
+    }, { quoted: message });
 }
 
 async function promote(sock, chatId, senderId, message) {
@@ -633,6 +656,10 @@ async function donate(sock, chatId, senderId, args, message) {
         }, { quoted: message });
         return;
     }
+    if (amount < 10) {
+        await sock.sendMessage(chatId, { text: '❌ Минимальный донат — 10 сообщений' }, { quoted: message });
+        return;
+    }
     if (userMsgs < amount) {
         await sock.sendMessage(chatId, {
             text: `❌ Недостаточно сообщений\nУ вас: *${userMsgs}*, нужно: *${amount}*`
@@ -688,4 +715,26 @@ async function handle(sock, chatId, senderId, rawText, message) {
     }
 }
 
-module.exports = { handle, handleReaction };
+function trackMsg(chatId, senderId) {
+    try {
+        initDb();
+        const db = loadDb();
+        const clanId = db.users[senderId];
+        if (!clanId || !db.clans[clanId]) return;
+        const clan = db.clans[clanId];
+        const prevLvl = lvl(clan.xp).level;
+        clan.xp += 1;
+        const newLvl = lvl(clan.xp).level;
+        saveDb(db);
+        // Уведомление о новом уровне (редко — не спамим)
+        if (newLvl > prevLvl) {
+            // Уведомим в следующем сообщении через глобальный флаг
+            if (!global._clanLevelUp) global._clanLevelUp = {};
+            global._clanLevelUp[chatId] = { clan, newLvl };
+        }
+    } catch (e) {
+        console.error('trackMsg error:', e.message);
+    }
+}
+
+module.exports = { handle, handleReaction, trackMsg };
