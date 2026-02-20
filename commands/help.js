@@ -25,7 +25,8 @@ async function helpCommand(sock, chatId, message) {
                 { title: "+чат", description: "Открыть группу", id: "cmd_groupinfo" },
                 { title: ".кик @пользователь", description: "Исключить участника", id: "cmd_kick" },
                 { title: ".повысить @пользователь", description: "Дать права администратора", id: "cmd_promote" },
-                { title: ".понизить @пользователь", description: "Снять права администратора", id: "cmd_demote" }
+                { title: ".понизить @пользователь", description: "Снять права администратора", id: "cmd_demote" },
+                { title: ".ссылка", description: "Позволяет получить ссылку на текущую группу", id: "cmd_kick" }
             ]
         },
         {

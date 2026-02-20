@@ -6,19 +6,71 @@ const { exec } = require('child_process');
 const webp = require('node-webpmux');
 const crypto = require('crypto');
 
-async function getDisplayName(sock, jid) {
-    if (!jid) return 'user';
+async function resolve(sock, jid, chatId) {
+    if (!jid) return null;
+
+    // Если уже нормальный JID
+    if (jid.endsWith('@s.whatsapp.net')) return jid;
+
+    // Резолвим @lid через участников группы
+    if (jid.endsWith('@lid') && chatId?.endsWith('@g.us')) {
+        try {
+            const meta = await sock.groupMetadata(chatId);
+            const lidNum = jid.split('@')[0];
+            const match = meta.participants?.find(p => p.lid?.split('@')[0] === lidNum || p.id?.split('@')[0] === lidNum);
+            if (match?.id?.endsWith('@s.whatsapp.net')) return match.id;
+        } catch {}
+    }
+
+    // Fallback — пробуем просто заменить суффикс
+    return jid.split('@')[0] + '@s.whatsapp.net';
+}
+
+async function name(sock, jid, chatId) {
+    const resolved = await resolve(sock, jid, chatId);
+    if (!resolved) return 'user';
+
+    // Store
     const store = sock.store?.contacts || {};
-    const normalized = jid.endsWith('@lid') ? jid.split('@')[0] + '@s.whatsapp.net' : jid;
+    const contact = store[resolved];
+    if (contact) {
+        const candidate = contact.name || contact.notify || contact.vname || contact.verifiedName;
+        if (candidate && !/^\+?\d+$/.test(candidate)) return candidate;
+    }
 
-    const contact = store[normalized];
-    if (contact?.name && !/^\d+$/.test(contact.name)) return contact.name;
-
+    // getName
     try {
-        const name = await sock.getName(normalized);
-        if (name && !/^\d+$/.test(name)) return name;
+        const n = await sock.getName(resolved);
+        if (n && !/^\+?\d+$/.test(n)) return n;
     } catch {}
-    return normalized.split('@')[0];
+
+    // Если есть groupMetadata, ищем по имени участника
+    if (chatId?.endsWith('@g.us')) {
+        try {
+            const meta = await sock.groupMetadata(chatId);
+            const p = meta.participants?.find(p => p.id === resolved);
+            if (p?.name && !/^\+?\d+$/.test(p.name)) return p.name;
+        } catch {}
+    }
+
+    return resolved.split('@')[0];
+}
+
+async function avatar(sock, jid, chatId) {
+    const resolved = await resolve(sock, jid, chatId);
+    const fallback = 'https://www.clipartmax.com/png/full/245-2459068_marco-martinangeli-coiffeur-portrait-of-a-man.png';
+
+    if (!resolved) return fallback;
+
+    // Пробуем оригинальный и резолвнутый JID
+    for (const id of [resolved, jid]) {
+        try {
+            const url = await sock.profilePictureUrl(id, 'image');
+            if (url) return url;
+        } catch {}
+    }
+
+    return fallback;
 }
 
 async function quoteCommand(sock, chatId, message, text) {
@@ -28,19 +80,21 @@ async function quoteCommand(sock, chatId, message, text) {
     if (!srcText && ctx?.quotedMessage?.conversation) {
         srcText = ctx.quotedMessage.conversation;
     }
+    if (!srcText && ctx?.quotedMessage?.extendedTextMessage?.text) {
+        srcText = ctx.quotedMessage.extendedTextMessage.text;
+    }
 
     if (!srcText) {
         await sock.sendMessage(chatId, { text: 'Напиши текст или ответь на сообщение с текстом' }, { quoted: message });
         return;
     }
 
-    let senderId = ctx?.participant || message.key.participant || message.key.remoteJid;
-    if (senderId.endsWith('@lid')) senderId = senderId.split('@')[0] + '@s.whatsapp.net';
+    const rawSender = ctx?.participant || message.key.participant || message.key.remoteJid;
 
     // Форматируем текст
     const words = srcText.split(' ');
-    const maxWords = 5;
     const maxLen = 30;
+    const maxWords = 5;
     let formatted = '';
     let line = '';
     for (let i = 0; i < words.length; i++) {
@@ -50,25 +104,15 @@ async function quoteCommand(sock, chatId, message, text) {
             w = w.slice(maxLen);
         }
         if ((line + w).length <= maxLen) line += w + ' ';
-        else {
-            formatted += line.trim() + '\n';
-            line = w + ' ';
-        }
-        if ((i + 1) % maxWords === 0) {
-            formatted += line.trim() + '\n';
-            line = '';
-        }
+        else { formatted += line.trim() + '\n'; line = w + ' '; }
+        if ((i + 1) % maxWords === 0) { formatted += line.trim() + '\n'; line = ''; }
     }
     if (line.trim()) formatted += line.trim();
 
-    const name = await getDisplayName(sock, senderId);
-
-    let avatar;
-    try {
-        avatar = await sock.profilePictureUrl(senderId, 'image');
-    } catch {
-        avatar = 'https://www.clipartmax.com/png/full/245-2459068_marco-martinangeli-coiffeur-portrait-of-a-man.png';
-    }
+    const [userName, userAvatar] = await Promise.all([
+        name(sock, rawSender, chatId),
+        avatar(sock, rawSender, chatId)
+    ]);
 
     const payload = {
         type: 'q',
@@ -81,8 +125,8 @@ async function quoteCommand(sock, chatId, message, text) {
             avatar: true,
             from: {
                 id: 1,
-                name,
-                photo: { url: avatar }
+                name: userName,
+                photo: { url: userAvatar }
             },
             text: formatted
         }]
@@ -102,12 +146,13 @@ async function quoteCommand(sock, chatId, message, text) {
         const tmpDir = path.join(os.tmpdir(), 'quote');
         if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
 
-        const pngPath = path.join(tmpDir, `q_${Date.now()}.png`);
-        const webpPath = path.join(tmpDir, `q_${Date.now()}.webp`);
+        const ts = Date.now();
+        const pngPath = path.join(tmpDir, `q_${ts}.png`);
+        const webpPath = path.join(tmpDir, `q_${ts}.webp`);
         fs.writeFileSync(pngPath, Buffer.from(json.result.image, 'base64'));
 
         await new Promise((resolve, reject) => {
-            exec(`ffmpeg -y -i "${pngPath}" -vf "scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000" -c:v libwebp -pix_fmt yuva420p -quality 75 "${webpPath}"`, 
+            exec(`ffmpeg -y -i "${pngPath}" -vf "scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000" -c:v libwebp -pix_fmt yuva420p -quality 75 "${webpPath}"`,
             err => err ? reject(err) : resolve());
         });
 
@@ -129,7 +174,7 @@ async function quoteCommand(sock, chatId, message, text) {
 
         try { fs.unlinkSync(pngPath); fs.unlinkSync(webpPath); } catch {}
     } catch (e) {
-        console.error(e);
+        console.error('quote error:', e);
         await sock.sendMessage(chatId, { text: 'Ошибка генерации стикера' }, { quoted: message });
     }
 }

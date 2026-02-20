@@ -619,6 +619,12 @@ if (userMessage === '-чат') {
                 break;
             }
 
+            case userMessage.startsWith('.ссылка'): {
+          const linkCmd = getCommand('linkgroup');
+            if (linkCmd) await linkCmd(sock, chatId, senderId, message);
+              break;
+            }
+
             case userMessage.startsWith('.ban'): {
                 if (!isGroup) {
                     if (!message.key.fromMe && !senderIsSudo) {
