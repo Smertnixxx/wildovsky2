@@ -27,33 +27,46 @@ async function resolve(sock, jid, chatId) {
 }
 
 async function name(sock, jid, chatId) {
-    const resolved = await resolve(sock, jid, chatId);
-    if (!resolved) return 'user';
+    const store = require('../lib/lightweight_store');
 
-    // Store
-    const store = sock.store?.contacts || {};
-    const contact = store[resolved];
-    if (contact) {
-        const candidate = contact.name || contact.notify || contact.vname || contact.verifiedName;
-        if (candidate && !/^\+?\d+$/.test(candidate)) return candidate;
-    }
+    // Пробуем напрямую через store
+    const c = store.contacts?.[jid];
+    if (c?.name && !/^\+?\d+$/.test(c.name)) return c.name;
 
-    // getName
+    // getName по оригинальному jid
     try {
-        const n = await sock.getName(resolved);
+        const n = await sock.getName(jid);
         if (n && !/^\+?\d+$/.test(n)) return n;
     } catch {}
 
-    // Если есть groupMetadata, ищем по имени участника
+    // Если @lid — ищем через groupMetadata и phoneNumber (как в sticker.js)
     if (chatId?.endsWith('@g.us')) {
         try {
             const meta = await sock.groupMetadata(chatId);
-            const p = meta.participants?.find(p => p.id === resolved);
-            if (p?.name && !/^\+?\d+$/.test(p.name)) return p.name;
+            const p = meta?.participants?.find(p => p.id === jid || p.lid === jid);
+
+            if (p?.phoneNumber) {
+                const c2 = store.contacts?.[p.phoneNumber];
+                if (c2?.name && !/^\+?\d+$/.test(c2.name)) return c2.name;
+                try {
+                    const n2 = await sock.getName(p.phoneNumber);
+                    if (n2 && !/^\+?\d+$/.test(n2)) return n2;
+                } catch {}
+            }
+
+            // phoneNumber нет — пробуем резолвнуть lid в @s.whatsapp.net
+            if (p?.id?.endsWith('@s.whatsapp.net') && p.id !== jid) {
+                const c3 = store.contacts?.[p.id];
+                if (c3?.name && !/^\+?\d+$/.test(c3.name)) return c3.name;
+                try {
+                    const n3 = await sock.getName(p.id);
+                    if (n3 && !/^\+?\d+$/.test(n3)) return n3;
+                } catch {}
+            }
         } catch {}
     }
 
-    return resolved.split('@')[0];
+    return jid.split('@')[0];
 }
 
 async function avatar(sock, jid, chatId) {
