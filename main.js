@@ -379,13 +379,16 @@ if (/^[1-9]$/.test(userMessage) || /^(сдаться|сдаюсь|surrender|give
     if (/^[1-9]$/.test(userMessage)) return;
 }
 
-        // Increment message count
-        if (!message.key.fromMe) {
-            const topMembersCmd = getCommand('topmembers');
-            if (topMembersCmd?.incrementMessageCount) {
-                topMembersCmd.incrementMessageCount(chatId, senderId);
-            }
-        }
+// Increment message count
+if (!message.key.fromMe) {
+    const topMembersCmd = getCommand('topmembers');
+    if (topMembersCmd?.incrementMessageCount) {
+        topMembersCmd.incrementMessageCount(chatId, senderId);
+    }
+    // XP в клан за каждое сообщение участника (сообщения не списываются)
+    const clanCmd = getCommand('clancommands');
+    if (clanCmd?.trackMsg) clanCmd.trackMsg(chatId, senderId);
+}
 
         // Уведомление о новом уровне клана
 if (global._clanLevelUp?.[chatId]) {
