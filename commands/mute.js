@@ -1,43 +1,55 @@
 const isAdmin = require('../lib/isAdmin');
 
-async function muteCommand(sock, chatId, senderId, message, durationInMinutes) {
-    
-
-    const { isSenderAdmin, isBotAdmin } = await isAdmin(sock, chatId, senderId);
-    if (!isBotAdmin) {
-        await sock.sendMessage(chatId, { text: 'Дайте боту админку для закрытия чата' }, { quoted: message });
+async function muteCommand(sock, chatId, senderId, message) {
+    if (!chatId.endsWith('@g.us')) {
+        await sock.sendMessage(chatId, { text: 'Эту команду можно использовать только в группах' }, { quoted: message });
         return;
     }
 
-    if (!isSenderAdmin) {
-        await sock.sendMessage(chatId, { text: 'Только администраторы могут пользоваться этой командой.' }, { quoted: message });
+    const { isSenderAdmin, isBotAdmin } = await isAdmin(sock, chatId, senderId);
+
+    if (!isBotAdmin) {
+        await sock.sendMessage(chatId, { text: '❌ Дайте боту права администратора' }, { quoted: message });
+        return;
+    }
+
+    if (!isSenderAdmin && !message.key.fromMe) {
+        await sock.sendMessage(chatId, { text: '❌ Только администраторы могут использовать эту команду' }, { quoted: message });
         return;
     }
 
     try {
-        // Mute the group
         await sock.groupSettingUpdate(chatId, 'announcement');
-        
-        if (durationInMinutes !== undefined && durationInMinutes > 0) {
-            const durationInMilliseconds = durationInMinutes * 60 * 1000;
-            await sock.sendMessage(chatId, { text: `Группа была закрыта на ${durationInMinutes} минут.` }, { quoted: message });
-            
-            // Set timeout to unmute after duration
-            setTimeout(async () => {
-                try {
-                    await sock.groupSettingUpdate(chatId, 'not_announcement');
-                    await sock.sendMessage(chatId, { text: 'Группа была открыта по истечению таймера.' });
-                } catch (unmuteError) {
-                    console.error('Error unmuting group:', unmuteError);
-                }
-            }, durationInMilliseconds);
-        } else {
-            await sock.sendMessage(chatId, { text: 'Группа была закрыта' }, { quoted: message });
-        }
-    } catch (error) {
-        console.error('Error muting/unmuting the group:', error);
-        await sock.sendMessage(chatId, { text: 'блаблаблаблабла' }, { quoted: message });
+    } catch (e) {
+        console.error('Error in muteCommand:', e);
+        await sock.sendMessage(chatId, { text: 'не удалось' }, { quoted: message });
     }
 }
 
-module.exports = muteCommand;
+async function unmuteCommand(sock, chatId, senderId, message) {
+    if (!chatId.endsWith('@g.us')) {
+        await sock.sendMessage(chatId, { text: 'Эту команду можно использовать только в группах' }, { quoted: message });
+        return;
+    }
+
+    const { isSenderAdmin, isBotAdmin } = await isAdmin(sock, chatId, senderId);
+
+    if (!isBotAdmin) {
+        await sock.sendMessage(chatId, { text: '❌ Дайте боту права администратора' }, { quoted: message });
+        return;
+    }
+
+    if (!isSenderAdmin && !message.key.fromMe) {
+        await sock.sendMessage(chatId, { text: '❌ Только администраторы могут использовать эту команду' }, { quoted: message });
+        return;
+    }
+
+    try {
+        await sock.groupSettingUpdate(chatId, 'not_announcement');
+    } catch (e) {
+        console.error('Error in unmuteCommand:', e);
+        await sock.sendMessage(chatId, { text: 'не удалось' }, { quoted: message });
+    }
+}
+
+module.exports = { muteCommand, unmuteCommand };

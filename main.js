@@ -489,7 +489,22 @@ if (userMessage.startsWith('бот кто')) {
     return; 
 }
 // ==================================================================
+if (userMessage === '+чат') {
+    if (isGroup) {
+        const muteCmd = getCommand('mute');
+        if (muteCmd?.muteCommand) await muteCmd.muteCommand(sock, chatId, senderId, message);
+    }
+    return;
+}
 
+if (userMessage === '-чат') {
+    if (isGroup) {
+        const muteCmd = getCommand('mute');
+        if (muteCmd?.unmuteCommand) await muteCmd.unmuteCommand(sock, chatId, senderId, message);
+    }
+    return;
+}
+//=======Закрытие и открытие группы======================
         if (!userMessage.startsWith('.')) {
             const autotypingCmd = getCommand('autotyping');
             if (autotypingCmd?.handleAutotypingForMessage) {
@@ -714,14 +729,12 @@ case userMessage === '.exec': {
                 if (settingsCommand) await settingsCommand(sock, chatId, message);
                 break;
             }
-
+//======================СИСТЕМА МУТОВ (на данный момент убрана из-за неэффективности)========================
             case userMessage === '.муты': {
                 const mutelist = getCommand('mutelist');
                 if (mutelist) await mutelist(sock, chatId, senderId, message);
                 break;
             }
-
-
 
             case userMessage.startsWith('.мут'): {
                 const muteUserCmd = getCommand('muteuser');
@@ -736,7 +749,24 @@ case userMessage === '.exec': {
                 if (unmuteCommandUser) await unmuteCommandUser(sock, chatId, senderId, message);
                 break;
             }
+//=======================================================================
 
+case userMessage === '.пред' || userMessage.startsWith('.пред '): {
+    const warnCmd = getCommand('warnuser');
+    if (warnCmd) await warnCmd(sock, chatId, senderId, message);
+    break;
+}
+case userMessage === '.разпред' || userMessage.startsWith('.разпред '):
+case userMessage === '.анпред' || userMessage.startsWith('.анпред '): {
+    const unwarnCmd = getCommand('unwarnuser');
+    if (unwarnCmd) await unwarnCmd(sock, chatId, senderId, message);
+    break;
+}
+case userMessage === '.преды': {
+    const warnlistCmd = getCommand('warnlist');
+    if (warnlistCmd) await warnlistCmd(sock, chatId);
+    break;
+}
             case userMessage.startsWith('.mode'): {
                 if (!message.key.fromMe && !senderIsOwnerOrSudo) {
                     await sock.sendMessage(chatId, { 
@@ -907,12 +937,6 @@ case userMessage.startsWith('.antilink'): {
                 if (antitagCmd?.handleAntitagCommand) {
                     await antitagCmd.handleAntitagCommand(sock, chatId, userMessage, senderId, isSenderAdmin, message);
                 }
-                break;
-            }
-
-            case userMessage === '.meme': {
-                const memeCommand = getCommand('meme');
-                if (memeCommand) await memeCommand(sock, chatId, message);
                 break;
             }
 
@@ -1359,27 +1383,6 @@ case userMessage.startsWith('.гид'): {
                 break;
             }
 
-            case userMessage.startsWith('.video'):
-            case userMessage.startsWith('.ytmp4'): {
-                const videoCommand = getCommand('video');
-                if (videoCommand) await videoCommand(sock, chatId, message);
-                break;
-            }
-
-            case userMessage.startsWith('.tiktok'):
-            case userMessage.startsWith('.tt'): {
-                const tiktokCommand = getCommand('tiktok');
-                if (tiktokCommand) await tiktokCommand(sock, chatId, message);
-                break;
-            }
-
-            case userMessage.startsWith('.gpt'):
-            case userMessage.startsWith('.gemini'): {
-                const aiCommand = getCommand('ai');
-                if (aiCommand) await aiCommand(sock, chatId, message);
-                break;
-            }
-
             case userMessage.startsWith('.translate'):
             case userMessage.startsWith('.trt'): {
                 const commandLength = userMessage.startsWith('.translate') ? 10 : 4;
@@ -1388,17 +1391,6 @@ case userMessage.startsWith('.гид'): {
                     await translateCmd.handleTranslateCommand(sock, chatId, message, userMessage.slice(commandLength));
                 }
                 return;
-            }
-
-            case userMessage.startsWith('.ss'):
-            case userMessage.startsWith('.ssweb'):
-            case userMessage.startsWith('.screenshot'): {
-                const ssCommandLength = userMessage.startsWith('.screenshot') ? 11 : (userMessage.startsWith('.ssweb') ? 6 : 3);
-                const ssCmd = getCommand('ss');
-                if (ssCmd?.handleSsCommand) {
-                    await ssCmd.handleSsCommand(sock, chatId, message, userMessage.slice(ssCommandLength).trim());
-                }
-                break;
             }
 
             case userMessage.startsWith('.areact'):
@@ -1417,22 +1409,6 @@ case userMessage.startsWith('.гид'): {
                 break;
             }
 
-            case userMessage === '.shayari':
-            case userMessage === '.shayri': {
-                const shayariCmd = getCommand('shayari');
-                if (shayariCmd?.shayariCommand) {
-                    await shayariCmd.shayariCommand(sock, chatId, message);
-                }
-                break;
-            }
-
-            case userMessage.startsWith('.imagine'):
-            case userMessage.startsWith('.flux'):
-            case userMessage.startsWith('.dalle'): {
-                const imagineCommand = getCommand('imagine');
-                if (imagineCommand) await imagineCommand(sock, chatId, message);
-                break;
-            }
 
             case userMessage.startsWith('.autotyping'): {
                 const autotypingCmd = getCommand('autotyping');
@@ -1449,42 +1425,6 @@ case userMessage.startsWith('.гид'): {
                     await autoreadCmd.autoreadCommand(sock, chatId, message);
                 }
                 commandExecuted = true;
-                break;
-            }
-
-            case userMessage.startsWith('.heart'): {
-                const miscCmd = getCommand('misc');
-                if (miscCmd?.handleHeart) {
-                    await miscCmd.handleHeart(sock, chatId, message);
-                }
-                break;
-            }
-
-            case userMessage.startsWith('.horny'):
-            case userMessage.startsWith('.circle'):
-            case userMessage.startsWith('.lgbt'):
-            case userMessage.startsWith('.lolice'):
-            case userMessage.startsWith('.simpcard'):
-            case userMessage.startsWith('.tonikawa'):
-            case userMessage.startsWith('.its-so-stupid'):
-            case userMessage.startsWith('.namecard'):
-            case userMessage.startsWith('.oogway2'):
-            case userMessage.startsWith('.oogway'):
-            case userMessage.startsWith('.tweet'):
-            case userMessage.startsWith('.ytcomment'):
-            case userMessage.startsWith('.comrade'):
-            case userMessage.startsWith('.gay'):
-            case userMessage.startsWith('.glass'):
-            case userMessage.startsWith('.jail'):
-            case userMessage.startsWith('.passed'):
-            case userMessage.startsWith('.triggered'): {
-                const parts = userMessage.trim().split(/\s+/);
-                const sub = parts[0].slice(1);
-                const args = [sub, ...parts.slice(1)];
-                const miscCmd = getCommand('misc');
-                if (miscCmd?.miscCommand) {
-                    await miscCmd.miscCommand(sock, chatId, message, args);
-                }
                 break;
             }
             case userMessage.startsWith('.animu'):
@@ -1549,26 +1489,6 @@ case userMessage.startsWith('.гид'): {
                 const updateCommand = getCommand('update');
                 if (updateCommand) await updateCommand(sock, chatId, message, zipArg);
                 commandExecuted = true;
-                break;
-            }
-
-            case userMessage.startsWith('.removebg'):
-            case userMessage.startsWith('.rmbg'):
-            case userMessage.startsWith('.nobg'): {
-                const removebgCommand = getCommand('removebg');
-                if (removebgCommand?.exec) {
-                    await removebgCommand.exec(sock, message, userMessage.split(' ').slice(1));
-                }
-                break;
-            }
-
-            case userMessage.startsWith('.remini'):
-            case userMessage.startsWith('.enhance'):
-            case userMessage.startsWith('.upscale'): {
-                const reminiCmd = getCommand('remini');
-                if (reminiCmd?.reminiCommand) {
-                    await reminiCmd.reminiCommand(sock, chatId, message, userMessage.split(' ').slice(1));
-                }
                 break;
             }
 
