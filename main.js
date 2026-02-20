@@ -386,10 +386,6 @@ if (/^[1-9]$/.test(userMessage) || /^(сдаться|сдаюсь|surrender|give
                 topMembersCmd.incrementMessageCount(chatId, senderId);
             }
         }
-        if (!message.key.fromMe) {
-    const clanXp = require('./lib/clanxp');
-    clanXp.track(senderId);
-}
 
         // Check mute
         if (isGroup) {
