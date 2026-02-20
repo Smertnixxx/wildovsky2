@@ -379,6 +379,10 @@ if (/^[1-9]$/.test(userMessage) || /^(сдаться|сдаюсь|surrender|give
                 topMembersCmd.incrementMessageCount(chatId, senderId);
             }
         }
+        if (!message.key.fromMe) {
+    const clanXp = require('./lib/clanxp');
+    clanXp.track(senderId);
+}
 
         // Check mute
         if (isGroup) {
@@ -595,6 +599,12 @@ if (userMessage === '-чат') {
                 if (kickCommand) await kickCommand(sock, chatId, senderId, mentionedJidListKick, message);
                 break;
             }
+
+            case userMessage === '.клан' || userMessage.startsWith('.клан '): {
+    const clanCmd = getCommand('clancommands');
+    if (clanCmd?.handle) await clanCmd.handle(sock, chatId, senderId, rawText, message);
+    break;
+}
 
             case userMessage.startsWith('.mute'):
             case userMessage.startsWith('+чат'): {
