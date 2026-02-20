@@ -250,6 +250,13 @@ async function handleMessages(sock, messageUpdate, printLog) {
             return;
         }
 
+if (message.message?.reactionMessage) {
+    const clanCmd = getCommand('clancommands');
+    if (clanCmd?.handleReaction) {
+        await clanCmd.handleReaction(sock, message);
+    }
+}
+
         // УДАЛИТЕ эти строки - они уже объявлены выше
         // const chatId = message.key.remoteJid;
         // const senderId = message.key.participant || message.key.remoteJid;
@@ -606,6 +613,8 @@ if (userMessage === '-чат') {
     break;
 }
 
+
+
             case userMessage.startsWith('.mute'):
             case userMessage.startsWith('+чат'): {
                 const parts = userMessage.trim().split(/\s+/);
@@ -622,12 +631,15 @@ if (userMessage === '-чат') {
                 break;
             }
 
+            
+
             case userMessage === '.unmute':
             case userMessage === '-чат': {
                 const unmuteCommand = getCommand('unmute');
                 if (unmuteCommand) await unmuteCommand(sock, chatId, senderId);
                 break;
             }
+            
 
             case userMessage.startsWith('.ссылка'): {
           const linkCmd = getCommand('linkgroup');

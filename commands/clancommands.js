@@ -5,6 +5,14 @@ const getDisplayName = require('../lib/getDisplayName');
 const dbPath = path.join(process.cwd(), 'data', 'clans.json');
 const msgPath = path.join(process.cwd(), 'data', 'clanmessages.json');
 
+const pendingCreate = {};
+
+const validReactions = [
+    '👍', '👍🏻', '👍🏼', '👍🏽', '👍🏾', '👍🏿',
+    '👎', '👎🏻', '👎🏼', '👎🏽', '👎🏾', '👎🏿'
+];
+
+const CREATE_COST = 1000;
 const LEVELS = [
     { level: 1,  xp: 0,     maxMembers: 10, officers: 0 },
     { level: 2,  xp: 1000,  maxMembers: 15, officers: 0 },
@@ -134,25 +142,118 @@ async function create(sock, chatId, senderId, args, message) {
         return;
     }
 
-    const id = genId();
-    db.clans[id] = {
-        id, name, tag, emblem,
-        description: '',
-        owner: senderId,
-        officers: [],
-        veterans: [],
-        members: [senderId],
-        membersSince: { [senderId]: Date.now() },
-        level: 1,
-        xp: 0,
-        created: Date.now()
-    };
-    db.users[senderId] = id;
-    saveDb(db);
+    const userMsgs = getMsg(senderId);
+    if (userMsgs < CREATE_COST) {
+        await sock.sendMessage(chatId, {
+            text: `❌ Недостаточно сообщений для создания клана\nНужно: *${CREATE_COST}*, у вас: *${userMsgs}*`
+        }, { quoted: message });
+        return;
+    }
 
-    await sock.sendMessage(chatId, {
-        text: `✅ Клан *[${tag}] ${name}* ${emblem} создан!\nВы — 👑 Владелец`
+    // Отправляем запрос подтверждения
+    const sent = await sock.sendMessage(chatId, {
+        text: `🏰 *Создание клана*\n\n` +
+              `Название: *${name}*\n` +
+              `Тег: *[${tag}]*\n` +
+              `Эмблема: ${emblem}\n\n` +
+              `Стоимость: *${CREATE_COST} сообщений*\n` +
+              `У вас: *${userMsgs} сообщений*\n\n` +
+              `Поставьте реакцию на это сообщение:\n` +
+              `👍 — подтвердить создание\n` +
+              `👎 — отменить`
     }, { quoted: message });
+
+    pendingCreate[sent.key.id] = {
+        senderId,
+        name,
+        tag,
+        emblem,
+        messageObj: sent
+    };
+
+    // Таймаут 3 минуты
+    setTimeout(() => {
+        if (pendingCreate[sent.key.id]) {
+            delete pendingCreate[sent.key.id];
+            sock.sendMessage(chatId, {
+                text: '⌛ Время подтверждения создания клана истекло'
+            }, { quoted: sent }).catch(() => {});
+        }
+    }, 3 * 60 * 1000);
+}
+
+async function handleReaction(sock, reactionMessage) {
+    try {
+        const messageId = reactionMessage.message?.reactionMessage?.key?.id;
+        const reactionText = reactionMessage.message?.reactionMessage?.text || '';
+        if (!messageId || !pendingCreate[messageId]) return;
+
+        const pending = pendingCreate[messageId];
+        const reactor = reactionMessage.key.participant || reactionMessage.key.remoteJid;
+        const chatId = reactionMessage.key.remoteJid;
+
+        // Реагировать может только тот кто создавал
+        if (reactor !== pending.senderId) return;
+        if (!validReactions.includes(reactionText)) return;
+
+        delete pendingCreate[messageId];
+
+        if (reactionText.startsWith('👎')) {
+            await sock.sendMessage(chatId, {
+                text: '❌ Создание клана отменено'
+            }, { quoted: pending.messageObj });
+            return;
+        }
+
+        if (reactionText.startsWith('👍')) {
+            initDb();
+            const db = loadDb();
+
+            if (db.users[pending.senderId]) {
+                await sock.sendMessage(chatId, { text: '❌ Вы уже состоите в клане' }, { quoted: pending.messageObj });
+                return;
+            }
+
+            const userMsgs = getMsg(pending.senderId);
+            if (userMsgs < CREATE_COST) {
+                await sock.sendMessage(chatId, {
+                    text: `❌ Недостаточно сообщений (нужно ${CREATE_COST}, у вас ${userMsgs})`
+                }, { quoted: pending.messageObj });
+                return;
+            }
+
+            // Списываем сообщения
+            const msgData = loadMsg();
+            msgData[pending.senderId] = (msgData[pending.senderId] || 0) - CREATE_COST;
+            saveMsg(msgData);
+
+            const id = genId();
+            db.clans[id] = {
+                id,
+                name: pending.name,
+                tag: pending.tag,
+                emblem: pending.emblem,
+                description: '',
+                owner: pending.senderId,
+                officers: [],
+                veterans: [],
+                members: [pending.senderId],
+                membersSince: { [pending.senderId]: Date.now() },
+                level: 1,
+                xp: 0,
+                created: Date.now()
+            };
+            db.users[pending.senderId] = id;
+            saveDb(db);
+
+            await sock.sendMessage(chatId, {
+                text: `✅ Клан *[${pending.tag}] ${pending.name}* ${pending.emblem} создан!\n👑 Вы — Владелец\n💎 Списано: *${CREATE_COST} сообщений*\nОсталось: *${msgData[pending.senderId]}*`
+            }, { quoted: pending.messageObj });
+        }
+
+    } catch (e) {
+        console.error('clan handleReaction error:', e);
+    }
 }
 
 async function disband(sock, chatId, senderId, message) {
