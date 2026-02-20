@@ -7,7 +7,8 @@ const msgPath = path.join(process.cwd(), 'data', 'messageCount.json');
 
 const CREATE_COST = 1000;
 
-const pendingCreate = {};
+if (!global._clanPending) global._clanPending = {};
+const pendingCreate = global._clanPending;
 
 const validReactions = [
     '👍', '👍🏻', '👍🏼', '👍🏽', '👍🏾', '👍🏿',
