@@ -383,14 +383,6 @@ if (!message.key.fromMe) {
     const antispam = require('./lib/antispam');
     const spamResult = antispam.check(chatId, senderId);
 
-    if (spamResult.resetDone) {
-        await sock.sendMessage(chatId, {
-            text: `textetxt` +
-                  `test *${spamResult.spamCount}*\n`,
-            mentions: [senderId]
-        });
-    }
-
     if (!spamResult.spam) {
         const topMembersCmd = getCommand('topmembers');
         if (topMembersCmd?.incrementMessageCount) {
