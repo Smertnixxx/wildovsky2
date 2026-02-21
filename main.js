@@ -605,7 +605,11 @@ if (userMessage === '-чат') {
 
         // Command execution
         let commandExecuted = false;
-
+if (message.key.fromMe && ['.setxp','.addxp','.delxp','.setlvl','.setmsgs','.addmsgs','.delmsgs','.clanunban','.clankick','.clanowner','.clandel','.clanlist','.clanwho'].some(c => userMessage.startsWith(c))) {
+    const clanAdminCmd = getCommand('clanAdmin');
+    if (clanAdminCmd?.handle) await clanAdminCmd.handle(sock, chatId, senderId, rawText, message);
+    return;
+}
         switch (true) {
             case userMessage.startsWith('.kick'):
             case userMessage.startsWith('.кик'): {
@@ -622,12 +626,7 @@ if (userMessage === '-чат') {
 }
 
 
-case cmd => ['.setxp','.addxp','.delxp','.setlvl','.setmsgs','.addmsgs','.delmsgs','.clanunban','.clankick','.clanowner','.clandel','.clanlist','.clanwho'].some(c => userMessage.startsWith(c)): {
-    const clanAdminCmd = getCommand('clanAdmin');
-    if (clanAdminCmd?.handle) await clanAdminCmd.handle(sock, chatId, senderId, rawText, message);
-    break;
-}
-            case userMessage.startsWith('.mute'):
+        case userMessage.startsWith('.mute'):
             case userMessage.startsWith('+чат'): {
                 const parts = userMessage.trim().split(/\s+/);
                 const muteArg = parts[1];
