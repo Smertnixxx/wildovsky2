@@ -381,7 +381,9 @@ if (/^[1-9]$/.test(userMessage) || /^(сдаться|сдаюсь|surrender|give
 
 if (!message.key.fromMe) {
     const antispam = require('./lib/antispam');
-    const spamResult = antispam.check(chatId, senderId);
+    const msgText = rawText || '';
+    const spamResult = antispam.check(chatId, senderId, msgText); // ← добавить msgText
+
 
     if (!spamResult.spam) {
         const topMembersCmd = getCommand('topmembers');
