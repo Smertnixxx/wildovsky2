@@ -1,8 +1,10 @@
-const fs = require('fs');
+'use strict';
+
+const fs   = require('fs');
 const path = require('path');
 const getDisplayName = require('../lib/getDisplayName');
 
-const dbPath = path.join(process.cwd(), 'data', 'clans.json');
+const dbPath  = path.join(process.cwd(), 'data', 'clans.json');
 const msgPath = path.join(process.cwd(), 'data', 'messageCount.json');
 
 const CREATE_COST = 1000;
@@ -12,7 +14,7 @@ const pendingCreate = global._clanPending;
 
 const validReactions = [
     '👍', '👍🏻', '👍🏼', '👍🏽', '👍🏾', '👍🏿',
-    '👎', '👎🏻', '👎🏼', '👎🏽', '👎🏾', '👎🏿'
+    '👎', '👎🏻', '👎🏼', '👎🏽', '👎🏾', '👎🏿',
 ];
 
 const LEVELS = [
@@ -28,44 +30,95 @@ const LEVELS = [
     { level: 10, xp: 75000, maxMembers: 75, officers: 3 },
 ];
 
-// ─── db ───────────────────────────────────────────────────────────────
+// ─── in-memory DB cache ───────────────────────────────────────────────────
+//
+// Читаем clans.json один раз, держим в памяти, пишем батчами каждые 5 секунд.
+// trackMsg вызывается на КАЖДОЕ сообщение — без кеша это тысячи readFileSync/writeFileSync
+// в час, что создаёт огромное GC-давление.
 
-function initDb() {
+let _db        = null;   // кеш БД кланов
+let _dbDirty   = false;  // флаг — нужно ли сохранять
+let _msgCache  = null;   // кеш messageCount
+let _msgDirty  = false;
+let _msgTimer  = null;
+
+function ensureDir() {
     const dir = path.join(process.cwd(), 'data');
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify({ clans: {}, users: {} }), 'utf8');
+}
+
+function initDb() {
+    if (_db) return;
+    ensureDir();
+    if (!fs.existsSync(dbPath)) {
+        _db = { clans: {}, users: {} };
+        fs.writeFileSync(dbPath, JSON.stringify(_db), 'utf8');
+    } else {
+        try { _db = JSON.parse(fs.readFileSync(dbPath, 'utf8')); }
+        catch { _db = { clans: {}, users: {} }; }
+    }
+    if (!_db.clans) _db.clans = {};
+    if (!_db.users) _db.users = {};
 }
 
 function loadDb() {
-    try { return JSON.parse(fs.readFileSync(dbPath, 'utf8')); }
-    catch { return { clans: {}, users: {} }; }
+    initDb();
+    return _db;
 }
 
-function saveDb(data) {
-    fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
+function saveDb() {
+    _dbDirty = true;
+}
+
+// ─── messageCount cache ───────────────────────────────────────────────────
+
+function loadMsg() {
+    if (_msgCache) return _msgCache;
+    try { _msgCache = JSON.parse(fs.readFileSync(msgPath, 'utf8')); }
+    catch { _msgCache = {}; }
+    return _msgCache;
+}
+
+function scheduleMsgSave() {
+    if (_msgTimer) return;
+    _msgTimer = setTimeout(() => {
+        _msgTimer = null;
+        if (_msgDirty && _msgCache) {
+            try { fs.writeFileSync(msgPath, JSON.stringify(_msgCache, null, 2)); }
+            catch {}
+            _msgDirty = false;
+        }
+    }, 3000); // откладываем запись на 3 секунды
 }
 
 function getMsgCount(chatId, senderId) {
-    try {
-        const data = JSON.parse(fs.readFileSync(msgPath, 'utf8'));
-        return data[chatId]?.[senderId] || 0;
-    } catch {
-        return 0;
-    }
+    return loadMsg()[chatId]?.[senderId] || 0;
 }
 
 function deductMsgs(chatId, senderId, amount) {
-    try {
-        const data = JSON.parse(fs.readFileSync(msgPath, 'utf8'));
-        if (!data[chatId]) data[chatId] = {};
-        data[chatId][senderId] = Math.max(0, (data[chatId][senderId] || 0) - amount);
-        fs.writeFileSync(msgPath, JSON.stringify(data, null, 2));
-    } catch (e) {
-        console.error('deductMsgs error:', e);
-    }
+    const data = loadMsg();
+    if (!data[chatId]) data[chatId] = {};
+    data[chatId][senderId] = Math.max(0, (data[chatId][senderId] || 0) - amount);
+    _msgDirty = true;
+    scheduleMsgSave();
 }
 
-// ─── helpers ──────────────────────────────────────────────────────────
+// Периодический сброс кеша кланов на диск
+setInterval(() => {
+    if (_dbDirty && _db) {
+        try { fs.writeFileSync(dbPath, JSON.stringify(_db, null, 2)); }
+        catch (e) { console.error('clan db flush error:', e.message); }
+        _dbDirty = false;
+    }
+    // Принудительно обновляем кеш messageCount из файла раз в 30 секунд,
+    // чтобы не разъехаться с другими модулями, которые тоже пишут в него.
+    if (!_msgDirty) {
+        try { _msgCache = JSON.parse(fs.readFileSync(msgPath, 'utf8')); }
+        catch {}
+    }
+}, 5000);
+
+// ─── helpers ──────────────────────────────────────────────────────────────
 
 function lvl(xp) {
     let cur = LEVELS[0];
@@ -105,12 +158,12 @@ function getTarget(message) {
            message.message?.extendedTextMessage?.contextInfo?.participant || null;
 }
 
-// ─── команды ──────────────────────────────────────────────────────────
+// ─── команды ──────────────────────────────────────────────────────────────
 
 async function create(sock, chatId, senderId, args, message) {
     if (args.length < 3) {
         await sock.sendMessage(chatId, {
-            text: '❕ Использование: .клан создать [название] [тег 5 симв] [эмодзи]\nПример: .клан создать Уточки YTOKI 🦆\n\n*Название — одно слово без пробелов*'
+            text: '❕ Использование: .клан создать [название] [тег 5 симв] [эмодзи]\nПример: .клан создать Уточки YTOKI 🦆\n\n*Название — одно слово без пробелов*',
         }, { quoted: message });
         return;
     }
@@ -131,15 +184,13 @@ async function create(sock, chatId, senderId, args, message) {
         return;
     }
 
-    initDb();
-    const db = loadDb();
+    const db   = loadDb();
+    const list = Object.values(db.clans);
 
     if (db.users[senderId]) {
         await sock.sendMessage(chatId, { text: '❌ Вы уже состоите в клане' }, { quoted: message });
         return;
     }
-
-    const list = Object.values(db.clans);
     if (list.some(c => c.name.toLowerCase() === name.toLowerCase())) {
         await sock.sendMessage(chatId, { text: '❌ Клан с таким названием уже существует' }, { quoted: message });
         return;
@@ -152,7 +203,7 @@ async function create(sock, chatId, senderId, args, message) {
     const userMsgs = getMsgCount(chatId, senderId);
     if (userMsgs < CREATE_COST) {
         await sock.sendMessage(chatId, {
-            text: `❌ Недостаточно сообщений для создания клана\nНужно: *${CREATE_COST}*, у вас: *${userMsgs}*`
+            text: `❌ Недостаточно сообщений для создания клана\nНужно: *${CREATE_COST}*, у вас: *${userMsgs}*`,
         }, { quoted: message });
         return;
     }
@@ -164,7 +215,7 @@ async function create(sock, chatId, senderId, args, message) {
               `Эмблема: ${emblem}\n\n` +
               `Стоимость: *${CREATE_COST} сообщений*\n` +
               `У вас: *${userMsgs} сообщений*\n\n` +
-              `Поставьте реакцию:\n👍 — подтвердить\n👎 — отменить`
+              `Поставьте реакцию:\n👍 — подтвердить\n👎 — отменить`,
     }, { quoted: message });
 
     pendingCreate[sent.key.id] = { senderId, chatId, name, tag, emblem, messageObj: sent };
@@ -179,13 +230,13 @@ async function create(sock, chatId, senderId, args, message) {
 
 async function handleReaction(sock, reactionMessage) {
     try {
-        const messageId = reactionMessage.message?.reactionMessage?.key?.id;
+        const messageId   = reactionMessage.message?.reactionMessage?.key?.id;
         const reactionText = reactionMessage.message?.reactionMessage?.text || '';
         if (!messageId || !pendingCreate[messageId]) return;
 
         const pending = pendingCreate[messageId];
         const reactor = reactionMessage.key.participant || reactionMessage.key.remoteJid;
-        const chatId = reactionMessage.key.remoteJid;
+        const chatId  = reactionMessage.key.remoteJid;
 
         if (reactor !== pending.senderId) return;
         if (!validReactions.includes(reactionText)) return;
@@ -198,9 +249,7 @@ async function handleReaction(sock, reactionMessage) {
         }
 
         if (reactionText.startsWith('👍')) {
-            initDb();
             const db = loadDb();
-
             if (db.users[pending.senderId]) {
                 await sock.sendMessage(chatId, { text: '❌ Вы уже состоите в клане' }, { quoted: pending.messageObj });
                 return;
@@ -209,7 +258,7 @@ async function handleReaction(sock, reactionMessage) {
             const userMsgs = getMsgCount(pending.chatId, pending.senderId);
             if (userMsgs < CREATE_COST) {
                 await sock.sendMessage(chatId, {
-                    text: `❌ Недостаточно сообщений (нужно ${CREATE_COST}, у вас ${userMsgs})`
+                    text: `❌ Недостаточно сообщений (нужно ${CREATE_COST}, у вас ${userMsgs})`,
                 }, { quoted: pending.messageObj });
                 return;
             }
@@ -219,28 +268,28 @@ async function handleReaction(sock, reactionMessage) {
             const id = genId();
             db.clans[id] = {
                 id,
-                name: pending.name,
-                tag: pending.tag,
-                emblem: pending.emblem,
+                name:        pending.name,
+                tag:         pending.tag,
+                emblem:      pending.emblem,
                 description: '',
-                owner: pending.senderId,
-                officers: [],
-                veterans: [],
-                members: [pending.senderId],
+                owner:       pending.senderId,
+                officers:    [],
+                veterans:    [],
+                members:     [pending.senderId],
                 membersSince: { [pending.senderId]: Date.now() },
-                level: 1,
-                xp: 0,
-                created: Date.now()
+                level:       1,
+                xp:          0,
+                created:     Date.now(),
             };
             db.users[pending.senderId] = id;
-            saveDb(db);
+            saveDb();
 
-            const remaining = getMsgCount(pending.chatId, pending.senderId);
+            const rem = getMsgCount(pending.chatId, pending.senderId);
             await sock.sendMessage(chatId, {
                 text: `✅ Клан *[${pending.tag}] ${pending.name}* ${pending.emblem} создан!\n` +
                       `👑 Вы — Владелец\n` +
                       `💎 Списано: *${CREATE_COST} сообщений*\n` +
-                      `Осталось: *${remaining}*`
+                      `Осталось: *${rem}*`,
             }, { quoted: pending.messageObj });
         }
     } catch (e) {
@@ -249,8 +298,7 @@ async function handleReaction(sock, reactionMessage) {
 }
 
 async function disband(sock, chatId, senderId, message) {
-    initDb();
-    const db = loadDb();
+    const db     = loadDb();
     const clanId = db.users[senderId];
     if (!clanId) {
         await sock.sendMessage(chatId, { text: '❌ Вы не состоите в клане' }, { quoted: message });
@@ -263,13 +311,12 @@ async function disband(sock, chatId, senderId, message) {
     }
     for (const m of clan.members) delete db.users[m];
     delete db.clans[clanId];
-    saveDb(db);
+    saveDb();
     await sock.sendMessage(chatId, { text: `💀 Клан *[${clan.tag}] ${clan.name}* распущен` }, { quoted: message });
 }
 
 async function transfer(sock, chatId, senderId, message) {
-    initDb();
-    const db = loadDb();
+    const db     = loadDb();
     const clanId = db.users[senderId];
     if (!clanId) {
         await sock.sendMessage(chatId, { text: '❌ Вы не состоите в клане' }, { quoted: message });
@@ -285,16 +332,15 @@ async function transfer(sock, chatId, senderId, message) {
         await sock.sendMessage(chatId, { text: '❕ Упомяните другого участника клана' }, { quoted: message });
         return;
     }
-    clan.owner = target;
+    clan.owner   = target;
     clan.officers = (clan.officers || []).filter(o => o !== target);
-    saveDb(db);
+    saveDb();
     const name = await getDisplayName(sock, target);
     await sock.sendMessage(chatId, { text: `👑 Права владельца переданы *${name}*`, mentions: [target] }, { quoted: message });
 }
 
 async function setDesc(sock, chatId, senderId, args, message) {
-    initDb();
-    const db = loadDb();
+    const db     = loadDb();
     const clanId = db.users[senderId];
     if (!clanId) {
         await sock.sendMessage(chatId, { text: '❌ Вы не состоите в клане' }, { quoted: message });
@@ -311,12 +357,11 @@ async function setDesc(sock, chatId, senderId, args, message) {
         return;
     }
     clan.description = desc;
-    saveDb(db);
+    saveDb();
     await sock.sendMessage(chatId, { text: '✅ Описание обновлено' }, { quoted: message });
 }
 
 async function join(sock, chatId, senderId, args, message) {
-    initDb();
     const db = loadDb();
     if (db.users[senderId]) {
         await sock.sendMessage(chatId, { text: '❌ Сначала выйдите из текущего клана' }, { quoted: message });
@@ -343,13 +388,12 @@ async function join(sock, chatId, senderId, args, message) {
     if (!clan.membersSince) clan.membersSince = {};
     clan.membersSince[senderId] = Date.now();
     db.users[senderId] = clan.id;
-    saveDb(db);
+    saveDb();
     await sock.sendMessage(chatId, { text: `✅ Вы вступили в клан *[${clan.tag}] ${clan.name}* ${clan.emblem}` }, { quoted: message });
 }
 
 async function leave(sock, chatId, senderId, message) {
-    initDb();
-    const db = loadDb();
+    const db     = loadDb();
     const clanId = db.users[senderId];
     if (!clanId) {
         await sock.sendMessage(chatId, { text: '❌ Вы не состоите в клане' }, { quoted: message });
@@ -360,25 +404,23 @@ async function leave(sock, chatId, senderId, message) {
         await sock.sendMessage(chatId, { text: '❌ Владелец не может покинуть клан. Передайте права или распустите клан' }, { quoted: message });
         return;
     }
-    clan.members = clan.members.filter(m => m !== senderId);
+    clan.members  = clan.members.filter(m => m !== senderId);
     clan.officers = (clan.officers || []).filter(o => o !== senderId);
     clan.veterans = (clan.veterans || []).filter(v => v !== senderId);
     if (clan.membersSince) delete clan.membersSince[senderId];
     delete db.users[senderId];
-    saveDb(db);
+    saveDb();
     await sock.sendMessage(chatId, { text: `✅ Вы покинули клан *[${clan.tag}] ${clan.name}*` }, { quoted: message });
 }
 
 async function invite(sock, chatId, senderId, message) {
-    initDb();
-    const db = loadDb();
+    const db     = loadDb();
     const clanId = db.users[senderId];
     if (!clanId) {
         await sock.sendMessage(chatId, { text: '❌ Вы не состоите в клане' }, { quoted: message });
         return;
     }
-    const clan = db.clans[clanId];
-
+    const clan   = db.clans[clanId];
     const target = getTarget(message);
     if (!target) {
         await sock.sendMessage(chatId, { text: '❕ Упомяните пользователя' }, { quoted: message });
@@ -389,11 +431,10 @@ async function invite(sock, chatId, senderId, message) {
         return;
     }
 
-    // Если в чёрном списке — только владелец может пригласить
     const isBlacklisted = (clan.blacklist || []).includes(target);
     if (isBlacklisted && clan.owner !== senderId) {
         await sock.sendMessage(chatId, {
-            text: '❌ Этот пользователь был исключён. Только владелец клана может пригласить его обратно'
+            text: '❌ Этот пользователь был исключён. Только владелец клана может пригласить его обратно',
         }, { quoted: message });
         return;
     }
@@ -412,22 +453,18 @@ async function invite(sock, chatId, senderId, message) {
     clan.members.push(target);
     if (!clan.membersSince) clan.membersSince = {};
     clan.membersSince[target] = Date.now();
-    // Снимаем с чёрного списка при приглашении владельцем
-    if (isBlacklisted) {
-        clan.blacklist = clan.blacklist.filter(b => b !== target);
-    }
+    if (isBlacklisted) clan.blacklist = clan.blacklist.filter(b => b !== target);
     db.users[target] = clan.id;
-    saveDb(db);
+    saveDb();
     const name = await getDisplayName(sock, target);
     await sock.sendMessage(chatId, {
         text: `✅ *${name}* добавлен в клан *[${clan.tag}] ${clan.name}* ${clan.emblem}`,
-        mentions: [target]
+        mentions: [target],
     }, { quoted: message });
 }
 
 async function kick(sock, chatId, senderId, message) {
-    initDb();
-    const db = loadDb();
+    const db     = loadDb();
     const clanId = db.users[senderId];
     if (!clanId) {
         await sock.sendMessage(chatId, { text: '❌ Вы не состоите в клане' }, { quoted: message });
@@ -455,25 +492,23 @@ async function kick(sock, chatId, senderId, message) {
         await sock.sendMessage(chatId, { text: '❌ Офицер не может кикнуть другого офицера' }, { quoted: message });
         return;
     }
-    clan.members = clan.members.filter(m => m !== target);
+    clan.members  = clan.members.filter(m => m !== target);
     clan.officers = (clan.officers || []).filter(o => o !== target);
     clan.veterans = (clan.veterans || []).filter(v => v !== target);
     if (clan.membersSince) delete clan.membersSince[target];
-    // Добавляем в чёрный список
     if (!clan.blacklist) clan.blacklist = [];
     if (!clan.blacklist.includes(target)) clan.blacklist.push(target);
     delete db.users[target];
-    saveDb(db);
+    saveDb();
     const name = await getDisplayName(sock, target);
     await sock.sendMessage(chatId, {
         text: `✅ *${name}* исключён из клана и не сможет вступить обратно без приглашения владельца`,
-        mentions: [target]
+        mentions: [target],
     }, { quoted: message });
 }
 
 async function promote(sock, chatId, senderId, message) {
-    initDb();
-    const db = loadDb();
+    const db     = loadDb();
     const clanId = db.users[senderId];
     if (!clanId) {
         await sock.sendMessage(chatId, { text: '❌ Вы не состоите в клане' }, { quoted: message });
@@ -489,7 +524,7 @@ async function promote(sock, chatId, senderId, message) {
         await sock.sendMessage(chatId, { text: '❕ Упомяните другого участника клана' }, { quoted: message });
         return;
     }
-    const name = await getDisplayName(sock, target);
+    const name    = await getDisplayName(sock, target);
     const lvlData = lvl(clan.xp);
 
     if ((clan.officers || []).includes(target)) {
@@ -508,19 +543,18 @@ async function promote(sock, chatId, senderId, message) {
         if (!clan.officers) clan.officers = [];
         clan.officers.push(target);
         clan.veterans = clan.veterans.filter(v => v !== target);
-        saveDb(db);
+        saveDb();
         await sock.sendMessage(chatId, { text: `⚔️ *${name}* повышен до Офицера`, mentions: [target] }, { quoted: message });
         return;
     }
     if (!clan.veterans) clan.veterans = [];
     clan.veterans.push(target);
-    saveDb(db);
+    saveDb();
     await sock.sendMessage(chatId, { text: `🛡️ *${name}* получил звание Ветерана`, mentions: [target] }, { quoted: message });
 }
 
 async function demote(sock, chatId, senderId, message) {
-    initDb();
-    const db = loadDb();
+    const db     = loadDb();
     const clanId = db.users[senderId];
     if (!clanId) {
         await sock.sendMessage(chatId, { text: '❌ Вы не состоите в клане' }, { quoted: message });
@@ -541,13 +575,13 @@ async function demote(sock, chatId, senderId, message) {
         clan.officers = clan.officers.filter(o => o !== target);
         if (!clan.veterans) clan.veterans = [];
         clan.veterans.push(target);
-        saveDb(db);
+        saveDb();
         await sock.sendMessage(chatId, { text: `🛡️ *${name}* понижен до Ветерана`, mentions: [target] }, { quoted: message });
         return;
     }
     if ((clan.veterans || []).includes(target)) {
         clan.veterans = clan.veterans.filter(v => v !== target);
-        saveDb(db);
+        saveDb();
         await sock.sendMessage(chatId, { text: `👤 *${name}* понижен до Участника`, mentions: [target] }, { quoted: message });
         return;
     }
@@ -555,7 +589,6 @@ async function demote(sock, chatId, senderId, message) {
 }
 
 async function info(sock, chatId, senderId, args, message) {
-    initDb();
     const db = loadDb();
     let clan;
     if (args.length > 0) {
@@ -571,11 +604,11 @@ async function info(sock, chatId, senderId, args, message) {
         await sock.sendMessage(chatId, { text: '❌ Клан не найден' }, { quoted: message });
         return;
     }
-    const lvlData = lvl(clan.xp);
-    const next = nextLvl(clan.xp);
+    const lvlData   = lvl(clan.xp);
+    const next      = nextLvl(clan.xp);
     const ownerName = await getDisplayName(sock, clan.owner);
-    const created = new Date(clan.created).toLocaleDateString('ru-RU');
-    const xpInfo = next ? `${clan.xp}/${next.xp} XP` : `${clan.xp} XP (макс. уровень)`;
+    const created   = new Date(clan.created).toLocaleDateString('ru-RU');
+    const xpInfo    = next ? `${clan.xp}/${next.xp} XP` : `${clan.xp} XP (макс. уровень)`;
     const lines = [
         `${clan.emblem} *[${clan.tag}] ${clan.name}*`,
         ``,
@@ -584,13 +617,12 @@ async function info(sock, chatId, senderId, args, message) {
         `👥 Участников: *${clan.members.length}/${lvlData.maxMembers}*`,
         `👑 Владелец: *${ownerName}*`,
         `📅 Создан: *${created}*`,
-        clan.description ? `📝 ${clan.description}` : null
+        clan.description ? `📝 ${clan.description}` : null,
     ].filter(Boolean).join('\n');
     await sock.sendMessage(chatId, { text: lines }, { quoted: message });
 }
 
 async function myClan(sock, chatId, senderId, message) {
-    initDb();
     const db = loadDb();
     if (!db.users[senderId]) {
         await sock.sendMessage(chatId, { text: '❌ Вы не состоите в клане' }, { quoted: message });
@@ -600,15 +632,14 @@ async function myClan(sock, chatId, senderId, message) {
 }
 
 async function top(sock, chatId, message) {
-    initDb();
-    const db = loadDb();
+    const db    = loadDb();
     const clans = Object.values(db.clans).sort((a, b) => b.xp - a.xp).slice(0, 10);
     if (clans.length === 0) {
         await sock.sendMessage(chatId, { text: '⚪ Кланов пока нет' }, { quoted: message });
         return;
     }
     const medals = ['🥇', '🥈', '🥉'];
-    const lines = clans.map((c, i) => {
+    const lines  = clans.map((c, i) => {
         const l = lvl(c.xp);
         const m = medals[i] || `${i + 1}.`;
         return `${m} *[${c.tag}] ${c.name}* ${c.emblem}\n   ⭐ Ур.${l.level} • 💎 ${c.xp} XP • 👥 ${c.members.length} уч.`;
@@ -617,42 +648,40 @@ async function top(sock, chatId, message) {
 }
 
 async function membersList(sock, chatId, senderId, message) {
-    initDb();
-    const db = loadDb();
+    const db     = loadDb();
     const clanId = db.users[senderId];
     if (!clanId) {
         await sock.sendMessage(chatId, { text: '❌ Вы не состоите в клане' }, { quoted: message });
         return;
     }
-    const clan = db.clans[clanId];
+    const clan    = db.clans[clanId];
     const lvlData = lvl(clan.xp);
     const mentions = [];
-    const lines = [];
+    const lines    = [];
     for (const jid of clan.members) {
         const name = await getDisplayName(sock, jid);
-        const r = roleOf(clan, jid);
+        const r    = roleOf(clan, jid);
         lines.push(`${r.icon} *${name}* — ${r.label}`);
         mentions.push(jid);
     }
     await sock.sendMessage(chatId, {
         text: `${clan.emblem} *[${clan.tag}] ${clan.name}* — участники (${clan.members.length}/${lvlData.maxMembers})\n\n${lines.join('\n')}`,
-        mentions
+        mentions,
     }, { quoted: message });
 }
 
 async function donate(sock, chatId, senderId, args, message) {
-    initDb();
-    const db = loadDb();
+    const db     = loadDb();
     const clanId = db.users[senderId];
     if (!clanId) {
         await sock.sendMessage(chatId, { text: '❌ Вы не состоите в клане' }, { quoted: message });
         return;
     }
-    const amount = parseInt(args[0]);
+    const amount   = parseInt(args[0]);
     const userMsgs = getMsgCount(chatId, senderId);
     if (!amount || amount <= 0 || isNaN(amount)) {
         await sock.sendMessage(chatId, {
-            text: `❕ Использование: .клан донат [количество]\nПример: .клан донат 100\n\nВаших сообщений: *${userMsgs}*`
+            text: `❕ Использование: .клан донат [количество]\nПример: .клан донат 100\n\nВаших сообщений: *${userMsgs}*`,
         }, { quoted: message });
         return;
     }
@@ -662,30 +691,30 @@ async function donate(sock, chatId, senderId, args, message) {
     }
     if (userMsgs < amount) {
         await sock.sendMessage(chatId, {
-            text: `❌ Недостаточно сообщений\nУ вас: *${userMsgs}*, нужно: *${amount}*`
+            text: `❌ Недостаточно сообщений\nУ вас: *${userMsgs}*, нужно: *${amount}*`,
         }, { quoted: message });
         return;
     }
     deductMsgs(chatId, senderId, amount);
-    const clan = db.clans[clanId];
+    const clan    = db.clans[clanId];
     const prevLvl = lvl(clan.xp).level;
-    clan.xp += amount;
-    const newLvl = lvl(clan.xp).level;
-    saveDb(db);
-    const remaining = getMsgCount(chatId, senderId);
-    let text = `💎 Вы вложили *${amount} XP* в клан *[${clan.tag}] ${clan.name}*\n` +
-               `Итого XP клана: *${clan.xp}*\n` +
-               `Ваших сообщений осталось: *${remaining}*`;
+    clan.xp      += amount;
+    const newLvl  = lvl(clan.xp).level;
+    saveDb();
+    const rem  = getMsgCount(chatId, senderId);
+    let text   = `💎 Вы вложили *${amount} XP* в клан *[${clan.tag}] ${clan.name}*\n` +
+                 `Итого XP клана: *${clan.xp}*\n` +
+                 `Ваших сообщений осталось: *${rem}*`;
     if (newLvl > prevLvl) text += `\n\n🎉 Клан достиг *${newLvl} уровня*!`;
     await sock.sendMessage(chatId, { text }, { quoted: message });
 }
 
-// ─── router ───────────────────────────────────────────────────────────
+// ─── router ───────────────────────────────────────────────────────────────
 
 async function handle(sock, chatId, senderId, rawText, message) {
     const parts = rawText.trim().split(/\s+/);
-    const sub = (parts[1] || '').toLowerCase();
-    const args = parts.slice(2);
+    const sub   = (parts[1] || '').toLowerCase();
+    const args  = parts.slice(2);
 
     switch (sub) {
         case 'создать':    return create(sock, chatId, senderId, args, message);
@@ -709,26 +738,25 @@ async function handle(sock, chatId, senderId, rawText, message) {
                     `*Управление:*\n.клан создать [название] [тег] [эмодзи]\n.клан описание [текст]\n.клан передать @user\n.клан распустить\n\n` +
                     `*Участники:*\n.клан вступить [название]\n.клан выйти\n.клан пригласить @user\n.клан кик @user\n.клан повысить @user\n.клан понизить @user\n\n` +
                     `*Инфо:*\n.клан инфо [название]\n.клан мои\n.клан топ\n.клан участники\n\n` +
-                    `*Казна:*\n.клан донат [сумма] — конвертирует ваши сообщения в XP клана`
+                    `*Казна:*\n.клан донат [сумма] — конвертирует ваши сообщения в XP клана`,
             }, { quoted: message });
         }
     }
 }
 
+// trackMsg вызывается на каждое сообщение.
+// Теперь работает только с in-memory кешем, диск не трогает синхронно.
 function trackMsg(chatId, senderId) {
     try {
-        initDb();
-        const db = loadDb();
+        const db     = loadDb();
         const clanId = db.users[senderId];
         if (!clanId || !db.clans[clanId]) return;
-        const clan = db.clans[clanId];
+        const clan    = db.clans[clanId];
         const prevLvl = lvl(clan.xp).level;
-        clan.xp += 1;
-        const newLvl = lvl(clan.xp).level;
-        saveDb(db);
-        // Уведомление о новом уровне (редко — не спамим)
+        clan.xp      += 1;
+        const newLvl  = lvl(clan.xp).level;
+        saveDb(); // только помечает dirty, реальная запись — в setInterval
         if (newLvl > prevLvl) {
-            // Уведомим в следующем сообщении через глобальный флаг
             if (!global._clanLevelUp) global._clanLevelUp = {};
             global._clanLevelUp[chatId] = { clan, newLvl };
         }
