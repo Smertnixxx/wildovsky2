@@ -100,6 +100,8 @@ function loadCommand(commandName) {
 
 // Функция для получения команды (всегда свежая версия)
 function getCommand(commandName) {
+    const cached = commandCache.get(commandName);
+    if (cached) return cached.module;
     return loadCommand(commandName);
 }
 
