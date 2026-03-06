@@ -1,4 +1,3 @@
-
 const { proto } = require('@whiskeysockets/baileys');
 const isAdmin = require('../lib/isAdmin');
 const isOwnerOrSudo = require('../lib/isOwner');
@@ -16,6 +15,20 @@ async function vse(sock, chatId, msg, text) {
         return;
     }
 
+    let count = 1;
+    let messageText = text || '';
+
+    if (messageText) {
+        const parts = messageText.trim().split(/\s+/);
+        const last = parts[parts.length - 1];
+
+        if (!isNaN(last)) {
+            count = parseInt(last, 10);
+            parts.pop();
+            messageText = parts.join(' ');
+        }
+    }
+
     try {
         await sock.sendMessage(chatId, { delete: msg.key });
     } catch (e) {
@@ -24,7 +37,7 @@ async function vse(sock, chatId, msg, text) {
 
     const built = proto.Message.fromObject({
         extendedTextMessage: proto.Message.ExtendedTextMessage.fromObject({
-            text: text ? `@all ${text}` : '@all',
+            text: messageText ? `@all ${messageText}` : '@all',
             previewType: proto.Message.ExtendedTextMessage.PreviewType.NONE,
             contextInfo: proto.ContextInfo.fromObject({
                 nonJidMentions: 1
@@ -33,7 +46,9 @@ async function vse(sock, chatId, msg, text) {
         })
     });
 
-    await sock.relayMessage(chatId, built, {});
+    for (let i = 0; i < count; i++) {
+        await sock.relayMessage(chatId, built, {});
+    }
 }
 
 module.exports = vse;
