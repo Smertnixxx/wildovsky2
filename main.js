@@ -1759,14 +1759,19 @@ async function handleGroupParticipantUpdate(sock, update) {
             if (typeof modeData.isPublic === 'boolean') isPublic = modeData.isPublic;
         } catch (e) {}
 
-        if (action === 'demote') {
-            if (!isPublic) return;
-            const demoteCmd = getCommand('demote');
-            if (demoteCmd?.handleDemotionEvent) {
-                await demoteCmd.handleDemotionEvent(sock, id, participants, author);
-            }
-            return;
-        }
+if (action === 'demote') {
+    const groupprotect = getCommand('groupprotect');
+    if (groupprotect?.handleDemote) {
+        await groupprotect.handleDemote(sock, id, participants, author);
+    }
+
+    if (!isPublic) return;
+    const demoteCmd = getCommand('demote');
+    if (demoteCmd?.handleDemotionEvent) {
+        await demoteCmd.handleDemotionEvent(sock, id, participants, author);
+    }
+    return;
+}
 
         if (action === 'add') {
             const welcomeCmd = getCommand('welcome');
