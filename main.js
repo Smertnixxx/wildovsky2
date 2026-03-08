@@ -1676,7 +1676,6 @@ async function handleGroupParticipantUpdate(sock, update) {
                 groupName = await getDisplayName(sock, id).catch(() => id.split('@')[0]);
             }
 
-            // ANSI цветовые коды
             const colors = {
                 reset: '\x1b[0m',
                 red: '\x1b[31m',
@@ -1760,15 +1759,6 @@ async function handleGroupParticipantUpdate(sock, update) {
             if (typeof modeData.isPublic === 'boolean') isPublic = modeData.isPublic;
         } catch (e) {}
 
-        // if (action === 'promote') {
-        //     if (!isPublic) return;
-        //     const promoteCmd = getCommand('promote');
-        //     if (promoteCmd?.handlePromotionEvent) {
-        //         await promoteCmd.handlePromotionEvent(sock, id, participants, author);
-        //     }
-        //     return;
-        // }
-
         if (action === 'demote') {
             if (!isPublic) return;
             const demoteCmd = getCommand('demote');
@@ -1786,6 +1776,11 @@ async function handleGroupParticipantUpdate(sock, update) {
         }
 
         if (action === 'remove') {
+            const groupprotect = getCommand('groupprotect');
+            if (groupprotect?.handle) {
+                await groupprotect.handle(sock, id, participants, author);
+            }
+
             const goodbyeCmd = getCommand('goodbye');
             if (goodbyeCmd?.handleLeaveEvent) {
                 await goodbyeCmd.handleLeaveEvent(sock, id, participants);
