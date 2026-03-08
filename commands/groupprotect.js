@@ -26,7 +26,9 @@ async function handleDemote(sock, groupId, participants, author) {
         const loshara = meta.participants.find(p => p.id === author);
         if (!loshara) return;
         if (loshara.admin !== 'admin' && loshara.admin !== 'superadmin') return;
+
         await sock.groupParticipantsUpdate(groupId, [author], 'demote');
+        await sock.groupParticipantsUpdate(groupId, participants, 'promote');
     } catch (e) {
         console.error(e.message);
     }
