@@ -721,14 +721,13 @@ case userMessage.startsWith('.шрифт2'): {
                 break;
             }
 
-            case userMessage === '.sticker':
-            case userMessage === '.стикер': {
-                const stickerCommand = getCommand('sticker');
-                if (stickerCommand) await stickerCommand(sock, chatId, message);
-                commandExecuted = true;
-                break;
-            }
-
+case userMessage.startsWith('.sticker'):
+case userMessage.startsWith('.стикер'): {
+    const stickerCommand = getCommand('sticker');
+    if (stickerCommand) await stickerCommand(sock, chatId, message);
+    commandExecuted = true;
+    break;
+}
 
 
 
