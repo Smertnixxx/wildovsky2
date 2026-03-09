@@ -37,6 +37,8 @@ async function helpCommand(sock, chatId, message) {
                 { title: ".гид (ссылка на группу)", description: "Показывает информацию о группе по ссылке", id: "cmd_ping" },
                 { title: ".поиск", description: "Ищет картинки по вашему запросу в интернете", id: "cmd_ping" },
                 { title: ".котик", description: "Отправляет случайную картинку котика", id: "cmd_ping" },
+                { title: ".шрифт1 (ваш текст)", description: "Конвертирует ваш текст в уникальный шрифт", id: "cmd_ping" },
+                { title: ".шрифт2 (ваш текст)", description: "Конвертирует ваш текст в уникальный шрифт", id: "cmd_ping" },
                 { title: ".ttt", description: "Крестики-нолики", id: "cmd_ttt" }
             ]
         },

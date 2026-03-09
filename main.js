@@ -638,6 +638,18 @@ case userMessage === '.audit': {
     break;
 }
 
+case userMessage.startsWith('.шрифт1'): {
+    const fontCmd = getCommand('font');
+    if (fontCmd) await fontCmd(sock, chatId, message, 1);
+    break;
+}
+
+case userMessage.startsWith('.шрифт2'): {
+    const fontCmd = getCommand('font');
+    if (fontCmd) await fontCmd(sock, chatId, message, 2);
+    break;
+}
+
 
         case userMessage.startsWith('.mute'):
             case userMessage.startsWith('+чат'): {
