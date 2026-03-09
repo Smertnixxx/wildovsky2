@@ -633,12 +633,6 @@ if (message.key.fromMe && ['.setxp','.addxp','.delxp','.setlvl','.setmsgs','.add
 
 case userMessage === '.журнал':
 case userMessage === '.audit': {
-    if (!isGroup) {
-        await sock.sendMessage(chatId, {
-            text: 'Журнал доступен только в группах.'
-        }, { quoted: message });
-        return;
-    }
     const auditlogCmd = getCommand('auditlog');
     if (auditlogCmd?.cmd) await auditlogCmd.cmd(sock, chatId, senderId, message);
     break;
