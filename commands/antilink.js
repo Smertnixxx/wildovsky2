@@ -2,6 +2,18 @@ const { bots } = require('../lib/antilink');
 const { setAntilink, getAntilink, removeAntilink } = require('../lib/index');
 const isAdmin = require('../lib/isAdmin');
 
+const actionMap = {
+    'удалять': 'delete',
+    'кикать': 'kick',
+    'предупреждать': 'warn'
+};
+
+const actionMapReverse = {
+    'delete': 'удалять',
+    'kick': 'кикать',
+    'warn': 'предупреждать'
+};
+
 async function handleAntilinkCommand(sock, chatId, userMessage, senderId, isSenderAdmin, message) {
     try {
         if (!isSenderAdmin) {
@@ -10,7 +22,7 @@ async function handleAntilinkCommand(sock, chatId, userMessage, senderId, isSend
         }
 
         const prefix = '.';
-        const command = userMessage.split(' ')[0]; // Получаем команду (например, ".антиссылка" или ".antilink")
+        const command = userMessage.split(' ')[0];
         
         // Определяем сколько символов нужно срезать в зависимости от команды
         const sliceLength = command === '.антиссылка' ? 11 : 9;
@@ -25,56 +37,75 @@ async function handleAntilinkCommand(sock, chatId, userMessage, senderId, isSend
         }
 
         switch (action) {
-            case 'вкл':
-                const existingConfig = await getAntilink(chatId, 'вкл');
+            case 'вкл': {
+                const existingConfig = await getAntilink(chatId, 'on');
                 if (existingConfig?.enabled) {
                     await sock.sendMessage(chatId, { text: 'Антиссылка и так включена' }, { quoted: message });
                     return;
                 }
-                const result = await setAntilink(chatId, 'вкл', 'удалять');
+                const result = await setAntilink(chatId, 'on', 'delete');
                 await sock.sendMessage(chatId, { 
-                    text: result ? 'антиссылка включена' : 'не удалось включить антиссылку' 
-                },{ quoted: message });
+                    text: result ? 'антиссылка включена (действие по умолчанию: удалять)' : 'не удалось включить антиссылку' 
+                }, { quoted: message });
                 break;
+            }
 
-            case 'выкл':
-                await removeAntilink(chatId, 'вкл');
+            case 'выкл': {
+                await removeAntilink(chatId, 'on');
                 await sock.sendMessage(chatId, { text: 'антиссылка выключена' }, { quoted: message });
                 break;
+            }
 
-            case 'условие':
+            case 'условие': {
                 if (args.length < 2) {
                     await sock.sendMessage(chatId, { 
                         text: `Пожалуйста, укажите действие: ${prefix}антиссылка условие удалять | кикать | предупреждать` 
                     }, { quoted: message });
                     return;
                 }
-                const setAction = args[1];
-                if (!['удалять', 'кикать', 'предупреждать'].includes(setAction)) {
+
+                const russianAction = args[1];
+                const englishAction = actionMap[russianAction];
+
+                if (!englishAction) {
                     await sock.sendMessage(chatId, { 
                         text: 'Вы не правильно набрали команду, выберите либо удалять либо кикать либо предупреждать.' 
                     }, { quoted: message });
                     return;
                 }
-                const setResult = await setAntilink(chatId, 'вкл', setAction);
-                await sock.sendMessage(chatId, { 
-                    text: setResult ? `Действие антиссылки установлено на ${setAction}` : 'Не удалось установить действие антиссылки' 
-                }, { quoted: message });
-                break;
 
-            case 'get':
-                const status = await getAntilink(chatId, 'вкл');
-                const actionConfig = await getAntilink(chatId, 'вкл');
+                const setResult = await setAntilink(chatId, 'on', englishAction);
                 await sock.sendMessage(chatId, { 
-                    text: `Конфиг антиссылки:\nСтатус: ${status ? 'вкл' : 'выкл'}\nДействие: ${actionConfig ? actionConfig.action : 'Не установлено'}` 
+                    text: setResult 
+                        ? `Действие антиссылки установлено на: ${russianAction}` 
+                        : 'Не удалось установить действие антиссылки. Сначала включите антиссылку командой .антиссылка вкл' 
                 }, { quoted: message });
                 break;
+            }
+
+            case 'статус':
+            case 'get': {
+                const config = await getAntilink(chatId, 'on');
+                if (!config) {
+                    await sock.sendMessage(chatId, { 
+                        text: 'Антиссылка выключена' 
+                    }, { quoted: message });
+                    return;
+                }
+                const readableAction = actionMapReverse[config.action] || config.action;
+                await sock.sendMessage(chatId, { 
+                    text: `Конфиг антиссылки:\nСтатус: ${config.enabled ? 'включена ✅' : 'выключена ❌'}\nДействие: ${readableAction}` 
+                }, { quoted: message });
+                break;
+            }
 
             default:
-                await sock.sendMessage(chatId, { text: `Используйте ${prefix}антиссылка\nдля справки` });
+                await sock.sendMessage(chatId, { 
+                    text: `Используйте ${prefix}антиссылка для справки\n\nДоступные команды:\n${prefix}антиссылка вкл\n${prefix}антиссылка выкл\n${prefix}антиссылка условие удалять | кикать | предупреждать\n${prefix}антиссылка статус` 
+                }, { quoted: message });
         }
     } catch (error) {
-        console.error('Ошибка:', error);
+        console.error('Ошибка в handleAntilinkCommand:', error);
         await sock.sendMessage(chatId, { text: 'Ошибка обработки команды антиссылки' });
     }
 }
@@ -82,12 +113,6 @@ async function handleAntilinkCommand(sock, chatId, userMessage, senderId, isSend
 async function handleLinkDetection(sock, chatId, message, userMessage, senderId) {
     const antilinkSetting = getAntilinkSetting(chatId);
     if (antilinkSetting === 'off') return;
-
-    console.log(`Настройка антиссылки для ${chatId}: ${antilinkSetting}`);
-    console.log(`Проверка сообщения на ссылки: ${userMessage}`);
-    
-    // Логируем полный объект сообщения для диагностики структуры
-    console.log("Полный объект сообщения: ", JSON.stringify(message, null, 2));
 
     let shouldDelete = false;
 
@@ -98,13 +123,8 @@ async function handleLinkDetection(sock, chatId, message, userMessage, senderId)
         allLinks: /https?:\/\/\S+|www\.\S+|(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/\S*)?/i,
     };
 
-    // Обнаружение ссылок на группы WhatsApp
     if (antilinkSetting === 'whatsappGroup') {
-        console.log('Защита от ссылок на групп WhatsApp включена.');
-        if (linkPatterns.whatsappGroup.test(userMessage)) {
-            console.log('Обнаружена ссылка на группу WhatsApp!');
-            shouldDelete = true;
-        }
+        if (linkPatterns.whatsappGroup.test(userMessage)) shouldDelete = true;
     } else if (antilinkSetting === 'whatsappChannel' && linkPatterns.whatsappChannel.test(userMessage)) {
         shouldDelete = true;
     } else if (antilinkSetting === 'telegram' && linkPatterns.telegram.test(userMessage)) {
@@ -114,24 +134,22 @@ async function handleLinkDetection(sock, chatId, message, userMessage, senderId)
     }
 
     if (shouldDelete) {
-        const quotedMessageId = message.key.id; // Получаем ID сообщения для удаления
-        const quotedParticipant = message.key.participant || senderId; // Получаем ID участника
-
-        console.log(`Попытка удалить сообщение с id: ${quotedMessageId} от участника: ${quotedParticipant}`);
+        const quotedMessageId = message.key.id;
+        const quotedParticipant = message.key.participant || senderId;
 
         try {
             await sock.sendMessage(chatId, {
                 delete: { remoteJid: chatId, fromMe: false, id: quotedMessageId, participant: quotedParticipant },
             });
-            console.log(`Сообщение с ID ${quotedMessageId} успешно удалено.`);
         } catch (error) {
             console.error('Не удалось удалить сообщение:', error);
         }
 
         const mentionedJidList = [senderId];
-        await sock.sendMessage(chatId, { text: `Предупреждение! @${senderId.split('@')[0]}, публикация ссылок запрещена.`, mentions: mentionedJidList });
-    } else {
-        console.log('Ссылка не обнаружена или защита не включена для этого типа ссылок.');
+        await sock.sendMessage(chatId, { 
+            text: `Предупреждение! @${senderId.split('@')[0]}, публикация ссылок запрещена.`, 
+            mentions: mentionedJidList 
+        });
     }
 }
 
