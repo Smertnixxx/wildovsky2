@@ -27,6 +27,21 @@ async function getStickerName(sock, chatId, senderId) {
     return null;
 }
 
+function parseStickerArgs(rawText) {
+    const cmdEnd = rawText.indexOf(' ');
+    if (cmdEnd === -1) return { packName: null, author: null };
+
+    const args = rawText.slice(cmdEnd + 1).trim();
+    if (!args) return { packName: null, author: null };
+
+    const pipeIdx = args.indexOf('|');
+    if (pipeIdx === -1) return { packName: args.trim() || null, author: null };
+
+    const packName = args.slice(0, pipeIdx).trim() || null;
+    const author = args.slice(pipeIdx + 1).trim() || null;
+    return { packName, author };
+}
+
 async function stickerCommand(sock, chatId, message) {
     const messageToQuote = message;
     let targetMessage = message;
@@ -59,7 +74,25 @@ async function stickerCommand(sock, chatId, message) {
     }
 
     const senderId = (message?.key?.participant || message?.key?.remoteJid) || '';
-    const name = await getStickerName(sock, chatId, senderId) || 'wildovsky';
+
+    const rawText =
+        message.message?.conversation ||
+        message.message?.extendedTextMessage?.text ||
+        message.message?.imageMessage?.caption ||
+        message.message?.videoMessage?.caption ||
+        '';
+
+    const { packName, author } = parseStickerArgs(rawText);
+
+    let stickerPackName = packName;
+    let stickerAuthor = author;
+
+    if (!stickerPackName) {
+        stickerPackName = await getStickerName(sock, chatId, senderId) || 'wildovsky';
+    }
+    if (!stickerAuthor) {
+        stickerAuthor = '';
+    }
 
     if (!mediaMessage) {
         await sock.sendMessage(chatId, { text: 'Ответь на сообщение чтобы сделать стикер или отправь картинку/видео с подписью .стикер' }, { quoted: messageToQuote });
@@ -101,7 +134,12 @@ async function stickerCommand(sock, chatId, message) {
 
         const img = new webp.Image();
         await img.load(webpBuffer);
-        const json = { 'sticker-pack-id': crypto.randomBytes(32).toString('hex'), 'sticker-pack-name': name, 'emojis': ['🦆'] };
+        const json = {
+            'sticker-pack-id': crypto.randomBytes(32).toString('hex'),
+            'sticker-pack-name': stickerPackName,
+            'sticker-pack-publisher': stickerAuthor,
+            'emojis': ['🦆']
+        };
         const exifAttr = Buffer.from([0x49,0x49,0x2A,0x00,0x08,0x00,0x00,0x00,0x01,0x00,0x41,0x57,0x07,0x00,0x00,0x00,0x00,0x00,0x16,0x00,0x00,0x00]);
         const jsonBuf = Buffer.from(JSON.stringify(json), 'utf8');
         const exif = Buffer.concat([exifAttr, jsonBuf]);
