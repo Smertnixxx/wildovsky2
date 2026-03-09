@@ -1768,7 +1768,8 @@ async function handleGroupParticipantUpdate(sock, update) {
 
 if (action === 'demote') {
     const auditlog = getCommand('auditlog');
-    if (auditlog?.log) auditlog.log(id, '⬇️', 'Снят с админки', authorName, participantNames.join(', '));
+    const who = author ? (authorName || author.split('@')[0]) : 'неизвестно';
+    if (auditlog?.log) auditlog.log(id, '⬇️', 'Снят с админки', who, participantNames.join(', '));
 
     const groupprotect = getCommand('groupprotect');
     if (groupprotect?.handleDemote) await groupprotect.handleDemote(sock, id, participants, author);
@@ -1781,14 +1782,16 @@ if (action === 'demote') {
 
 if (action === 'promote') {
     const auditlog = getCommand('auditlog');
-    if (auditlog?.log) auditlog.log(id, '⬆️', 'Повышен до админа', authorName, participantNames.join(', '));
+    const who = author ? (authorName || author.split('@')[0]) : 'неизвестно';
+    if (auditlog?.log) auditlog.log(id, '⬆️', 'Повышен до админа', who, participantNames.join(', '));
 }
 
 if (action === 'add') {
     const auditlog = getCommand('auditlog');
     if (auditlog?.log) {
-        if (author) {
-            auditlog.log(id, '➕', 'Добавлен в группу', authorName, participantNames.join(', '));
+        const who = author ? (authorName || author.split('@')[0]) : null;
+        if (who) {
+            auditlog.log(id, '➕', 'Добавлен в группу', who, participantNames.join(', '));
         } else {
             auditlog.log(id, '🔗', 'Вступил по ссылке', participantNames.join(', '));
         }
@@ -1803,10 +1806,11 @@ if (action === 'remove') {
     const auditlog = getCommand('auditlog');
     if (auditlog?.log) {
         const isSelf = normalizedParticipants.includes(author);
+        const who = author ? (authorName || author.split('@')[0]) : 'неизвестно';
         if (isSelf || !author) {
             auditlog.log(id, '🚪', 'Выход из группы', participantNames.join(', '));
         } else {
-            auditlog.log(id, '🚫', 'Кик участника', authorName, participantNames.join(', '));
+            auditlog.log(id, '🚫', 'Кик участника', who, participantNames.join(', '));
         }
     }
 
