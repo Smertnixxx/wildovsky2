@@ -631,6 +631,19 @@ if (message.key.fromMe && ['.setxp','.addxp','.delxp','.setlvl','.setmsgs','.add
     break;
 }
 
+case userMessage === '.журнал':
+case userMessage === '.audit': {
+    if (!isGroup) {
+        await sock.sendMessage(chatId, {
+            text: 'Журнал доступен только в группах.'
+        }, { quoted: message });
+        return;
+    }
+    const auditlogCmd = getCommand('auditlog');
+    if (auditlogCmd?.cmd) await auditlogCmd.cmd(sock, chatId, senderId, message);
+    break;
+}
+
 
         case userMessage.startsWith('.mute'):
             case userMessage.startsWith('+чат'): {
@@ -1760,37 +1773,55 @@ async function handleGroupParticipantUpdate(sock, update) {
         } catch (e) {}
 
 if (action === 'demote') {
+    const auditlog = getCommand('auditlog');
+    if (auditlog?.log) auditlog.log(id, '⬇️', 'Снят с админки', authorName, participantNames.join(', '));
+
     const groupprotect = getCommand('groupprotect');
-    if (groupprotect?.handleDemote) {
-        await groupprotect.handleDemote(sock, id, participants, author);
-    }
+    if (groupprotect?.handleDemote) await groupprotect.handleDemote(sock, id, participants, author);
 
     if (!isPublic) return;
     const demoteCmd = getCommand('demote');
-    if (demoteCmd?.handleDemotionEvent) {
-        await demoteCmd.handleDemotionEvent(sock, id, participants, author);
-    }
+    if (demoteCmd?.handleDemotionEvent) await demoteCmd.handleDemotionEvent(sock, id, participants, author);
     return;
 }
 
-        if (action === 'add') {
-            const welcomeCmd = getCommand('welcome');
-            if (welcomeCmd?.handleJoinEvent) {
-                await welcomeCmd.handleJoinEvent(sock, id, participants);
-            }
-        }
+if (action === 'promote') {
+    const auditlog = getCommand('auditlog');
+    if (auditlog?.log) auditlog.log(id, '⬆️', 'Повышен до админа', authorName, participantNames.join(', '));
+}
 
-        if (action === 'remove') {
-            const groupprotect = getCommand('groupprotect');
-            if (groupprotect?.handle) {
-                await groupprotect.handle(sock, id, participants, author);
-            }
-
-            const goodbyeCmd = getCommand('goodbye');
-            if (goodbyeCmd?.handleLeaveEvent) {
-                await goodbyeCmd.handleLeaveEvent(sock, id, participants);
-            }
+if (action === 'add') {
+    const auditlog = getCommand('auditlog');
+    if (auditlog?.log) {
+        if (author) {
+            auditlog.log(id, '➕', 'Добавлен в группу', authorName, participantNames.join(', '));
+        } else {
+            auditlog.log(id, '🔗', 'Вступил по ссылке', participantNames.join(', '));
         }
+    }
+
+    const welcomeCmd = getCommand('welcome');
+    if (welcomeCmd?.handleJoinEvent) await welcomeCmd.handleJoinEvent(sock, id, participants);
+}
+
+
+if (action === 'remove') {
+    const auditlog = getCommand('auditlog');
+    if (auditlog?.log) {
+        const isSelf = normalizedParticipants.includes(author);
+        if (isSelf || !author) {
+            auditlog.log(id, '🚪', 'Выход из группы', participantNames.join(', '));
+        } else {
+            auditlog.log(id, '🚫', 'Кик участника', authorName, participantNames.join(', '));
+        }
+    }
+
+    const groupprotect = getCommand('groupprotect');
+    if (groupprotect?.handle) await groupprotect.handle(sock, id, participants, author);
+
+    const goodbyeCmd = getCommand('goodbye');
+    if (goodbyeCmd?.handleLeaveEvent) await goodbyeCmd.handleLeaveEvent(sock, id, participants);
+}
     } catch (error) {
         console.error('Error in handleGroupParticipantUpdate:', error);
     }

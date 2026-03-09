@@ -396,6 +396,22 @@ async function startXeonBotInc() {
         await handleGroupParticipantUpdate(XeonBotInc, update);
     });
 
+    XeonBotInc.ev.on('groups.update', async (updates) => {
+    try {
+        const auditlog = require('./commands/auditlog');
+        if (!auditlog?.log) return;
+        for (const upd of updates) {
+            if (upd.id !== '120363420486491862@g.us') continue;
+            if (upd.subject !== undefined) auditlog.log(upd.id, '✏️', 'Название группы изменено', 'неизвестно', upd.subject);
+            if (upd.desc !== undefined)    auditlog.log(upd.id, '📝', 'Описание изменено', 'неизвестно');
+            if (upd.restrict !== undefined) auditlog.log(upd.id, '🔒', upd.restrict ? 'Только админы могут ред.' : 'Все могут редактировать', 'неизвестно');
+            if (upd.announce !== undefined) auditlog.log(upd.id, upd.announce ? '🔇' : '🔊', upd.announce ? 'Только админы пишут' : 'Все могут писать', 'неизвестно');
+        }
+    } catch (e) {
+        console.error('[auditlog groups.update]', e.message);
+    }
+});
+
     XeonBotInc.ev.on('messages.upsert', async (m) => {
         if (m.messages[0].key && m.messages[0].key.remoteJid === 'status@broadcast') {
             await handleStatus(XeonBotInc, m);
