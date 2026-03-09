@@ -1654,13 +1654,19 @@ async function handleGroupParticipantUpdate(sock, update) {
         const { id, participants, action, author } = update;
 
         if (!id.endsWith('@g.us')) return;
-        
+
+        // объявляем здесь — доступны везде в функции
+        let normalizedParticipants = [];
+        let participantNames = [];
+        let authorName = null;
+        let groupName = '';
+
         try {
-            const normalizedParticipants = Array.isArray(participants) 
+            normalizedParticipants = Array.isArray(participants)
                 ? participants.map(p => typeof p === 'string' ? p : (p?.id || p?.jid || String(p)))
                 : [];
 
-            const participantNames = await Promise.all(
+            participantNames = await Promise.all(
                 normalizedParticipants.map(async (participant) => {
                     try {
                         const name = await getDisplayName(sock, participant);
@@ -1671,11 +1677,10 @@ async function handleGroupParticipantUpdate(sock, update) {
                 })
             );
 
-            const authorName = author 
+            authorName = author
                 ? await getDisplayName(sock, author).catch(() => author.split('@')[0])
                 : null;
 
-            let groupName = '';
             try {
                 const groupMetadata = await sock.groupMetadata(id);
                 groupName = groupMetadata.subject || id.split('@')[0];
@@ -1684,34 +1689,24 @@ async function handleGroupParticipantUpdate(sock, update) {
             }
 
             const colors = {
-                reset: '\x1b[0m',
-                red: '\x1b[31m',
-                green: '\x1b[32m',
-                yellow: '\x1b[33m',
-                blue: '\x1b[34m',
-                cyan: '\x1b[36m',
-                white: '\x1b[37m',
-                gray: '\x1b[90m'
+                reset: '\x1b[0m', red: '\x1b[31m', green: '\x1b[32m',
+                yellow: '\x1b[33m', blue: '\x1b[34m', cyan: '\x1b[36m',
+                white: '\x1b[37m', gray: '\x1b[90m'
             };
 
             let logMessage = '';
             let icon = '';
             let iconColor = '';
 
-            switch(action) {
+            switch (action) {
                 case 'add':
-                    icon = '[+]';
-                    iconColor = colors.green;
-                    if (author) {
-                        logMessage = `\n\n${iconColor}${icon}${colors.reset} ${participantNames.join(', ')} ${colors.gray}added by${colors.reset} ${authorName}\n\n`;
-                    } else {
-                        logMessage = `\n\n${iconColor}${icon}${colors.reset} ${participantNames.join(', ')} ${colors.gray}joined via link${colors.reset}\n\n`;
-                    }
+                    icon = '[+]'; iconColor = colors.green;
+                    logMessage = author
+                        ? `\n\n${iconColor}${icon}${colors.reset} ${participantNames.join(', ')} ${colors.gray}added by${colors.reset} ${authorName}\n\n`
+                        : `\n\n${iconColor}${icon}${colors.reset} ${participantNames.join(', ')} ${colors.gray}joined via link${colors.reset}\n\n`;
                     break;
-
                 case 'remove':
-                    icon = '[-]';
-                    iconColor = colors.red;
+                    icon = '[-]'; iconColor = colors.red;
                     if (author && normalizedParticipants.includes(author)) {
                         logMessage = `\n\n${iconColor}${icon}${colors.reset} ${participantNames.join(', ')} ${colors.gray}left${colors.reset}\n\n`;
                     } else if (author) {
@@ -1720,32 +1715,24 @@ async function handleGroupParticipantUpdate(sock, update) {
                         logMessage = `\n\n${iconColor}${icon}${colors.reset} ${participantNames.join(', ')} ${colors.gray}left${colors.reset}\n\n`;
                     }
                     break;
-
                 case 'promote':
-                    icon = '[^]';
-                    iconColor = colors.cyan;
+                    icon = '[^]'; iconColor = colors.cyan;
                     logMessage = `\n\n${iconColor}${icon}${colors.reset} ${participantNames.join(', ')} ${colors.gray}promoted by${colors.reset} ${authorName}\n\n`;
                     break;
-
                 case 'demote':
-                    icon = '[v]';
-                    iconColor = colors.yellow;
+                    icon = '[v]'; iconColor = colors.yellow;
                     logMessage = `\n\n${iconColor}${icon}${colors.reset} ${participantNames.join(', ')} ${colors.gray}demoted by${colors.reset} ${authorName}\n\n`;
                     break;
-
                 default:
-                    icon = '[?]';
-                    iconColor = colors.blue;
+                    icon = '[?]'; iconColor = colors.blue;
                     logMessage = `\n\n${iconColor}${icon}${colors.reset} ${action}: ${participantNames.join(', ')}\n\n`;
             }
 
             console.log(logMessage);
 
-            let plainMessage = '';
-        
             logDetailed({
                 isCommand: false,
-                text: plainMessage,
+                text: '',
                 sender: author || '',
                 senderName: authorName || '',
                 chat: id,
@@ -1760,66 +1747,64 @@ async function handleGroupParticipantUpdate(sock, update) {
             console.error('Error in logging group event:', e);
         }
 
+        const who = author ? (authorName || author.split('@')[0]) : 'неизвестно';
+        const names = participantNames.length ? participantNames.join(', ') : normalizedParticipants.map(p => p.split('@')[0]).join(', ');
+
         let isPublic = true;
         try {
             const modeData = JSON.parse(fs.readFileSync('./data/messageCount.json'));
             if (typeof modeData.isPublic === 'boolean') isPublic = modeData.isPublic;
         } catch (e) {}
 
-if (action === 'demote') {
-    const auditlog = getCommand('auditlog');
-    const who = author ? (authorName || author.split('@')[0]) : 'неизвестно';
-    if (auditlog?.log) auditlog.log(id, '⬇️', 'Снят с админки', who, participantNames.join(', '));
+        if (action === 'demote') {
+            const auditlog = getCommand('auditlog');
+            if (auditlog?.log) auditlog.log(id, '⬇️', 'Снят с админки', who, names);
 
-    const groupprotect = getCommand('groupprotect');
-    if (groupprotect?.handleDemote) await groupprotect.handleDemote(sock, id, participants, author);
+            const groupprotect = getCommand('groupprotect');
+            if (groupprotect?.handleDemote) await groupprotect.handleDemote(sock, id, participants, author);
 
-    if (!isPublic) return;
-    const demoteCmd = getCommand('demote');
-    if (demoteCmd?.handleDemotionEvent) await demoteCmd.handleDemotionEvent(sock, id, participants, author);
-    return;
-}
-
-if (action === 'promote') {
-    const auditlog = getCommand('auditlog');
-    const who = author ? (authorName || author.split('@')[0]) : 'неизвестно';
-    if (auditlog?.log) auditlog.log(id, '⬆️', 'Повышен до админа', who, participantNames.join(', '));
-}
-
-if (action === 'add') {
-    const auditlog = getCommand('auditlog');
-    if (auditlog?.log) {
-        const who = author ? (authorName || author.split('@')[0]) : null;
-        if (who) {
-            auditlog.log(id, '➕', 'Добавлен в группу', who, participantNames.join(', '));
-        } else {
-            auditlog.log(id, '🔗', 'Вступил по ссылке', participantNames.join(', '));
+            if (!isPublic) return;
+            const demoteCmd = getCommand('demote');
+            if (demoteCmd?.handleDemotionEvent) await demoteCmd.handleDemotionEvent(sock, id, participants, author);
+            return;
         }
-    }
 
-    const welcomeCmd = getCommand('welcome');
-    if (welcomeCmd?.handleJoinEvent) await welcomeCmd.handleJoinEvent(sock, id, participants);
-}
-
-
-if (action === 'remove') {
-    const auditlog = getCommand('auditlog');
-    if (auditlog?.log) {
-        const isSelf = normalizedParticipants.includes(author);
-        const who = author ? (authorName || author.split('@')[0]) : 'неизвестно';
-        if (isSelf || !author) {
-            auditlog.log(id, '🚪', 'Выход из группы', participantNames.join(', '));
-        } else {
-            auditlog.log(id, '🚫', 'Кик участника', who, participantNames.join(', '));
+        if (action === 'promote') {
+            const auditlog = getCommand('auditlog');
+            if (auditlog?.log) auditlog.log(id, '⬆️', 'Повышен до админа', who, names);
         }
-    }
 
-    const groupprotect = getCommand('groupprotect');
-    if (groupprotect?.handle) await groupprotect.handle(sock, id, participants, author);
+        if (action === 'add') {
+            const auditlog = getCommand('auditlog');
+            if (auditlog?.log) {
+                if (author) {
+                    auditlog.log(id, '➕', 'Добавлен в группу', who, names);
+                } else {
+                    auditlog.log(id, '🔗', 'Вступил по ссылке', names);
+                }
+            }
+            const welcomeCmd = getCommand('welcome');
+            if (welcomeCmd?.handleJoinEvent) await welcomeCmd.handleJoinEvent(sock, id, participants);
+        }
 
-    const goodbyeCmd = getCommand('goodbye');
-    if (goodbyeCmd?.handleLeaveEvent) await goodbyeCmd.handleLeaveEvent(sock, id, participants);
-}
+        if (action === 'remove') {
+            const auditlog = getCommand('auditlog');
+            if (auditlog?.log) {
+                const isSelf = normalizedParticipants.includes(author);
+                if (isSelf || !author) {
+                    auditlog.log(id, '🚪', 'Вышел из группы', names);
+                } else {
+                    auditlog.log(id, '🚫', 'Кик участника', who, names);
+                }
+            }
+
+            const groupprotect = getCommand('groupprotect');
+            if (groupprotect?.handle) await groupprotect.handle(sock, id, participants, author);
+
+            const goodbyeCmd = getCommand('goodbye');
+            if (goodbyeCmd?.handleLeaveEvent) await goodbyeCmd.handleLeaveEvent(sock, id, participants);
+        }
+
     } catch (error) {
         console.error('Error in handleGroupParticipantUpdate:', error);
     }
