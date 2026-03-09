@@ -77,7 +77,7 @@ async function cmd(sock, chatId, senderId, message) {
                             text: ''
                         }),
                         header: proto.Message.InteractiveMessage.Header.create({
-                            title: 'Журнал аудита',
+                            title: '',
                             hasMediaAttachment: false
                         }),
                         nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.create({
