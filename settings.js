@@ -3,6 +3,8 @@ const settings = {
   author: '‎',
   botName: "wildovsky",
   botOwner: '', // Your name
+  botRole:    'biba',                        // на VPS
+  partnerJid: '79292991077@s.whatsapp.net', // JID Бобы
   ownerNumber: '79292991077', //Set your number here without + symbol, just add country code & number without any space
   giphyApiKey: 'qnl7ssQChTdPjsKta2Ax2LMaGXz303tq',
   commandMode: "public",
