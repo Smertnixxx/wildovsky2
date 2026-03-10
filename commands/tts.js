@@ -5,22 +5,24 @@ const path = require('path')
 function gettext(msg) {
     if (!msg) return null
     if (msg.conversation) return msg.conversation
-    if (msg.extendedTextMessage) return msg.extendedTextMessage.text
-    if (msg.imageMessage && msg.imageMessage.caption) return msg.imageMessage.caption
-    if (msg.videoMessage && msg.videoMessage.caption) return msg.videoMessage.caption
+    if (msg.extendedTextMessage?.text) return msg.extendedTextMessage.text
+    if (msg.imageMessage?.caption) return msg.imageMessage.caption
+    if (msg.videoMessage?.caption) return msg.videoMessage.caption
     return null
 }
 
-async function ttsCommand(sock, chatId, text, replyMessage, message, language = 'ru') {
-    let finalText = text
+async function ttsCommand(sock, chatId, message, text, language = 'ru') {
+    const ctx = message.message?.extendedTextMessage?.contextInfo
 
-    if (!finalText && replyMessage) {
-        finalText = gettext(replyMessage)
+    let srcText = text
+
+    if (!srcText && ctx?.quotedMessage) {
+        srcText = gettext(ctx.quotedMessage)
     }
 
-    if (!finalText) {
+    if (!srcText) {
         await sock.sendMessage(chatId, {
-            text: 'Ответь на сообщение или напиши текст:\n.tts текст'
+            text: 'Ответь на сообщение с текстом или напиши:\n.tts текст'
         }, { quoted: message })
         return
     }
@@ -28,11 +30,11 @@ async function ttsCommand(sock, chatId, text, replyMessage, message, language = 
     const fileName = `tts-${Date.now()}.mp3`
     const filePath = path.join(__dirname, '..', 'assets', fileName)
 
-    const gtts = new gTTS(finalText, language)
+    const gtts = new gTTS(srcText, language)
 
     gtts.save(filePath, async err => {
         if (err) {
-            await sock.sendMessage(chatId, { text: 'ошибка.' })
+            await sock.sendMessage(chatId, { text: 'ошибка.' }, { quoted: message })
             return
         }
 
@@ -41,7 +43,7 @@ async function ttsCommand(sock, chatId, text, replyMessage, message, language = 
             mimetype: 'audio/mpeg'
         }, { quoted: message })
 
-        fs.unlinkSync(filePath)
+        try { fs.unlinkSync(filePath) } catch {}
     })
 }
 
