@@ -1,9 +1,9 @@
 // commands/groupprotect.js
 const settings = require('../settings');
 
-const PROTECTED_GROUP = '120363424761879922@g.us';
-const DELAY_BIBA = 800;
-const DELAY_BOBA = 4500;
+const PROTECTED_GROUP = '120363420486491862@g.us';
+const DELAY_BIBA = 300;
+const DELAY_BOBA = 2500;
 
 function norm(jid = '') {
     return jid.replace(/:\d+@/, '@').trim();
@@ -33,7 +33,11 @@ async function isAdmin(sock, groupId, jid) {
     }
 }
 
-// кик участника (action === 'remove')
+function tag(jid) {
+    return `@${norm(jid).split('@')[0]}`;
+}
+
+// ─── кик участника (action === 'remove') ────────────────────────────────────
 async function handle(sock, groupId, participants, author) {
     if (groupId !== PROTECTED_GROUP) return;
     if (!author) return;
@@ -66,7 +70,7 @@ async function handle(sock, groupId, participants, author) {
     }
 }
 
-// снятие с админки (action === 'demote')
+// ─── снятие с админки (action === 'demote') ──────────────────────────────────
 async function handleDemote(sock, groupId, participants, author) {
     if (groupId !== PROTECTED_GROUP) return;
     if (!author) return;
@@ -85,7 +89,6 @@ async function handleDemote(sock, groupId, participants, author) {
 
         if (authorN === owner) return;
 
-        // проверяем что рейдер реально админ (не обычный участник)
         const raider = m.participants.find(p => norm(p.id) === authorN);
         if (!raider?.admin) return;
 
@@ -97,7 +100,7 @@ async function handleDemote(sock, groupId, participants, author) {
 
         await wait(role === 'biba' ? DELAY_BIBA : DELAY_BOBA);
 
-        // боба: берём только тех кого биба не успел восстановить
+        // боба: действует только если биба не успел восстановить
         let toRestore = victims;
         if (role === 'boba') {
             toRestore = [];
@@ -107,13 +110,11 @@ async function handleDemote(sock, groupId, participants, author) {
             if (toRestore.length === 0) return;
         }
 
-        // снимаем рейдера
         if (await isAdmin(sock, groupId, author)) {
             await sock.groupParticipantsUpdate(groupId, [author], 'demote');
-            console.log(`[protect][${role}] рейдер снят: ${authorN}`);
+            console.log(`[protect][${role}] demote-рейдер снят: ${authorN}`);
         }
 
-        // возвращаем права жертвам
         for (const v of toRestore) {
             if (!(await isAdmin(sock, groupId, v))) {
                 await sock.groupParticipantsUpdate(groupId, [v], 'promote');
@@ -121,12 +122,69 @@ async function handleDemote(sock, groupId, participants, author) {
             }
         }
 
-        const raiderTag  = `@${authorN.split('@')[0]}`;
-        const victimTags = toRestore.map(v => `@${v.split('@')[0]}`).join(', ');
-
     } catch (e) {
         console.error(`[protect][handleDemote]`, e.message);
     }
 }
 
-module.exports = { handle, handleDemote };
+// ─── выдача админки (action === 'promote') ───────────────────────────────────
+async function handlePromote(sock, groupId, participants, author) {
+    if (groupId !== PROTECTED_GROUP) return;
+    if (!author) return;
+
+    const me      = self(sock);
+    const partner = norm(settings.partnerJid || '');
+    const role    = settings.botRole || 'biba';
+    const authorN = norm(author);
+
+    if (authorN === me)      return;
+    if (authorN === partner) return;
+
+    try {
+        const m     = await getMeta(sock, groupId);
+        const owner = norm(m.owner || '');
+
+        // владелец может выдавать права — это нормально
+        if (authorN === owner) return;
+
+        const raider = m.participants.find(p => norm(p.id) === authorN);
+        if (!raider?.admin) return;
+
+        const promoted = participants
+            .map(p => norm(typeof p === 'string' ? p : (p?.id || '')))
+            .filter(Boolean);
+
+        if (promoted.length === 0) return;
+
+        await wait(role === 'biba' ? DELAY_BIBA : DELAY_BOBA);
+
+        // боба: действует только если биба не успел снять
+        let toStrip = promoted;
+        if (role === 'boba') {
+            toStrip = [];
+            for (const v of promoted) {
+                if (await isAdmin(sock, groupId, v)) toStrip.push(v);
+            }
+            if (toStrip.length === 0) return;
+        }
+
+        // снимаем рейдера
+        if (await isAdmin(sock, groupId, author)) {
+            await sock.groupParticipantsUpdate(groupId, [author], 'demote');
+            console.log(`[protect][${role}] promote-рейдер снят: ${authorN}`);
+        }
+
+        // снимаем тех кому рейдер выдал права
+        for (const v of toStrip) {
+            if (await isAdmin(sock, groupId, v)) {
+                await sock.groupParticipantsUpdate(groupId, [v], 'demote');
+                console.log(`[protect][${role}] незаконно выданная админка снята: ${v}`);
+            }
+        }
+
+    } catch (e) {
+        console.error(`[protect][handlePromote]`, e.message);
+    }
+}
+
+module.exports = { handle, handleDemote, handlePromote };
