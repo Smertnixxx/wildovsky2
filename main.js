@@ -766,12 +766,12 @@ case userMessage === '.exec': {
                 break;
             }
 
-            case userMessage.startsWith('.tts'): {
-                const text = userMessage.slice(4).trim();
-                const ttsCommand = getCommand('tts');
-                if (ttsCommand) await ttsCommand(sock, chatId, text, message);
-                break;
-            }
+case userMessage.startsWith('.tts'): {
+    const text = userMessage.slice(4).trim();
+    const ttsCommand = getCommand('tts');
+    if (ttsCommand) await ttsCommand(sock, chatId, message, text);
+    break;
+}
 
 
             case userMessage.startsWith('.delete'):
