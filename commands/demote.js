@@ -60,42 +60,42 @@ async function demoteCommand(sock, chatId, mentionedJids, message) {
     }
 }
 
-async function handleDemotionEvent(sock, groupId, participants, author) {
-    try {
-        if (!Array.isArray(participants) || !participants.length) return
+// async function handleDemotionEvent(sock, groupId, participants, author) {
+//     try {
+//         if (!Array.isArray(participants) || !participants.length) return
 
-        await sleep(1000)
+//         await sleep(1000)
 
-        const botId = sock.user.jid
-        const demoted = typeof participants[0] === 'string'
-            ? participants[0]
-            : participants[0].id || participants[0].toString()
+//         const botId = sock.user.jid
+//         const demoted = typeof participants[0] === 'string'
+//             ? participants[0]
+//             : participants[0].id || participants[0].toString()
 
-        const authorJid = author
-            ? typeof author === 'string'
-                ? author
-                : author.id || author.toString()
-            : null
+//         const authorJid = author
+//             ? typeof author === 'string'
+//                 ? author
+//                 : author.id || author.toString()
+//             : null
 
-        const authorName = authorJid ? authorJid.split('@')[0] : 'Система'
-        const demotedName = demoted.split('@')[0]
+//         const authorName = authorJid ? authorJid.split('@')[0] : 'Система'
+//         const demotedName = demoted.split('@')[0]
 
-        if (demoted === botId) {
-            return sock.sendMessage(groupId, {
-                text: `⚠️ Бота лишили прав администратора.\n👤 Снял: @${authorName}`,
-                mentions: authorJid ? [authorJid] : []
-            })
-        }
+//         if (demoted === botId) {
+//             return sock.sendMessage(groupId, {
+//                 text: `⚠️ Бота лишили прав администратора.\n👤 Снял: @${authorName}`,
+//                 mentions: authorJid ? [authorJid] : []
+//             })
+//         }
 
-        return sock.sendMessage(groupId, {
-            text: `🔽 Понижение\n👤 @${authorName} снял администратора @${demotedName}`,
-            mentions: authorJid ? [authorJid, demoted] : [demoted]
-        })
+//         return sock.sendMessage(groupId, {
+//             text: `🔽 Понижение\n👤 @${authorName} снял администратора @${demotedName}`,
+//             mentions: authorJid ? [authorJid, demoted] : [demoted]
+//         })
 
-    } catch (e) {
-        console.error('demotion event error:', e)
-        if (e?.data === 429) await sleep(2000)
-    }
-}
+//     } catch (e) {
+//         console.error('demotion event error:', e)
+//         if (e?.data === 429) await sleep(2000)
+//     }
+// }
 
-module.exports = { demoteCommand, handleDemotionEvent }
+module.exports = { demoteCommand }

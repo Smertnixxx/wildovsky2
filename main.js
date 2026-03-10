@@ -1780,10 +1780,14 @@ async function handleGroupParticipantUpdate(sock, update) {
             return;
         }
 
-        if (action === 'promote') {
-            const auditlog = getCommand('auditlog');
-            if (auditlog?.log) auditlog.log(id, '⬆️', 'Повышен до админа', who, names);
-        }
+if (action === 'promote') {
+    const auditlog = getCommand('auditlog');
+    if (auditlog?.log) auditlog.log(id, '⬆️', 'Повышен до админа', who, names);
+
+    // ↓ добавить
+    const groupprotect = getCommand('groupprotect');
+    if (groupprotect?.handlePromote) await groupprotect.handlePromote(sock, id, participants, author);
+}
 
         if (action === 'add') {
             const auditlog = getCommand('auditlog');
