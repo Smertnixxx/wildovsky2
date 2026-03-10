@@ -39,44 +39,42 @@ async function isAdmin(sock, groupId, jid) {
     }
 }
 
-// добавляем партнёра обратно в группу
-// сначала прямой add, при 403 — invite message в ЛС
+function isBlocked(e) {
+    const msg = (e?.message || e?.data || String(e)).toLowerCase();
+    return msg.includes('forbidden') || msg.includes('403') || msg.includes('not-authorized');
+}
+
 async function addPartner(sock, groupId, partnerJid) {
     try {
         await sock.groupParticipantsUpdate(groupId, [partnerJid], 'add');
         console.log(`[protect] прямой add успешен: ${partnerJid}`);
         return 'added';
     } catch (e) {
-        const is403 = e?.output?.statusCode === 403
-            || e?.message?.includes('403')
-            || e?.data?.includes?.('403');
-
-        if (!is403) {
-            console.error(`[protect] add упал с неизвестной ошибкой:`, e.message);
+        if (!isBlocked(e)) {
+            console.error(`[protect] add упал:`, e.message);
             return 'error';
         }
 
-        // fallback — invite message в ЛС партнёру
-        console.log(`[protect] 403 при add, пробуем invite message → ${partnerJid}`);
+        console.log(`[protect] add заблокирован, пробуем invite → ${partnerJid}`);
         try {
             const inviteCode = await sock.groupInviteCode(groupId);
             const meta       = await getMeta(sock, groupId);
-            const groupName  = meta.subject || 'группа';
 
             let jpegThumbnail = Buffer.alloc(0);
             try {
                 const pp  = await sock.profilePictureUrl(groupId, 'image');
-                const buf = await fetch(pp);
-                jpegThumbnail = await buf.buffer();
+                const res = await fetch(pp);
+                jpegThumbnail = await res.buffer();
             } catch {}
 
-            const invite = generateWAMessageFromContent(partnerJid,
+            const invite = generateWAMessageFromContent(
+                partnerJid,
                 proto.Message.fromObject({
                     groupInviteMessage: {
                         groupJid:         groupId,
                         inviteCode:       inviteCode,
                         inviteExpiration: Math.floor(Date.now() / 1000) + 86400,
-                        groupName:        groupName,
+                        groupName:        meta.subject || 'группа',
                         caption:          '🔔 Тебя исключили из группы. Зайди обратно по этому приглашению.',
                         jpegThumbnail:    jpegThumbnail,
                     }
@@ -85,61 +83,61 @@ async function addPartner(sock, groupId, partnerJid) {
             );
 
             await sock.relayMessage(partnerJid, invite.message, { messageId: invite.key.id });
-            console.log(`[protect] invite message отправлен: ${partnerJid}`);
+            console.log(`[protect] invite отправлен: ${partnerJid}`);
             return 'invited';
         } catch (invErr) {
-            console.error(`[protect] invite message упал:`, invErr.message);
+            console.error(`[protect] invite упал:`, invErr.message);
             return 'error';
         }
     }
 }
 
-// ждём появления партнёра в группе (макс waitMs)
-async function waitForRejoin(sock, groupId, partnerJid, waitMs = 15000) {
-    const step    = 1500;
-    const maxTick = Math.floor(waitMs / step);
-    const target  = norm(partnerJid);
+async function waitForRejoin(sock, groupId, partnerJid, waitMs = 20000) {
+    const step   = 1500;
+    const ticks  = Math.floor(waitMs / step);
+    const target = norm(partnerJid);
 
-    for (let i = 0; i < maxTick; i++) {
+    for (let i = 0; i < ticks; i++) {
         await wait(step);
         try {
             const m = await getMeta(sock, groupId);
-            const found = m.participants.find(p => norm(p.id) === target);
-            if (found) return true;
+            if (m.participants.find(p => norm(p.id) === target)) return true;
         } catch {}
     }
     return false;
 }
 
-// ─── кик обычного участника (action === 'remove') ───────────────────────────
+// ─── кик (action === 'remove') ───────────────────────────────────────────────
 async function handle(sock, groupId, participants, author) {
     if (groupId !== PROTECTED_GROUP) return;
     if (!author) return;
 
-    const me       = self(sock);
-    const partner  = norm(settings.partnerJid || '');
-    const role     = settings.botRole || 'biba';
-    const authorN  = norm(author);
+    const me      = self(sock);
+    const partner = norm(settings.partnerJid || '');
+    const role    = settings.botRole || 'biba';
+    const authorN = norm(author);
 
-    // если кикнули партнёра — возвращаем его
-    const kickedPartner = participants
+    const kickedList = participants
         .map(p => norm(typeof p === 'string' ? p : (p?.id || '')))
-        .includes(partner);
+        .filter(Boolean);
 
-    if (kickedPartner) {
-        // не реагируем на действия владельца — он мог кикнуть намеренно
+    // меня кикнули — я ничего не могу сделать, партнёр разберётся
+    if (kickedList.includes(me)) return;
+
+    // партнёра кикнули — я действую
+    if (kickedList.includes(partner)) {
+        if (authorN === me) return;
+
         try {
             const m     = await getMeta(sock, groupId);
             const owner = norm(m.owner || '');
             if (authorN === owner) return;
-        } catch {}
-
-        // не реагируем если это мы сами кикнули
-        if (authorN === me) return;
+        } catch (e) {
+            console.error(`[protect][handle] getMeta упал:`, e.message);
+            return;
+        }
 
         await wait(role === 'biba' ? DELAY_BIBA : DELAY_BOBA);
-
-        console.log(`[protect][${role}] партнёр кикнут, начинаем возврат`);
 
         // снимаем рейдера
         try {
@@ -148,35 +146,31 @@ async function handle(sock, groupId, participants, author) {
                 console.log(`[protect][${role}] рейдер снят: ${authorN}`);
             }
         } catch (e) {
-            console.error(`[protect] demote рейдера упал:`, e.message);
+            console.error(`[protect] demote рейдера:`, e.message);
         }
 
-        // добавляем партнёра обратно
         const result = await addPartner(sock, groupId, partner);
 
         if (result === 'added') {
-            // сразу повышаем
+            await wait(2000);
             try {
                 await sock.groupParticipantsUpdate(groupId, [partner], 'promote');
                 console.log(`[protect][${role}] партнёр возвращён и повышен`);
             } catch (e) {
-                console.error(`[protect] promote партнёра упал:`, e.message);
+                console.error(`[protect] promote после add:`, e.message);
             }
-
 
         } else if (result === 'invited') {
             const rejoined = await waitForRejoin(sock, groupId, partner);
             if (rejoined) {
+                await wait(2000);
                 try {
                     await sock.groupParticipantsUpdate(groupId, [partner], 'promote');
                     console.log(`[protect][${role}] партнёр вернулся и повышен`);
                 } catch (e) {
-                    console.error(`[protect] promote после rejoin упал:`, e.message);
+                    console.error(`[protect] promote после rejoin:`, e.message);
                 }
-            } else {
-                console.log(`[protect][${role}] партнёр не вернулся за 15 сек`);
-            }
-
+            } 
         } 
         return;
     }
@@ -253,6 +247,7 @@ async function handleDemote(sock, groupId, participants, author) {
                 console.log(`[protect][${role}] восстановлен: ${v}`);
             }
         }
+
 
     } catch (e) {
         console.error(`[protect][handleDemote]`, e.message);
