@@ -7,8 +7,19 @@ const PROTECTED_GROUP = '120363424761879922@g.us';
 const DELAY_BIBA = 300;
 const DELAY_BOBA = 2500;
 
+// убираем device-суффикс (:0, :1 и т.д.)
 function norm(jid = '') {
     return jid.replace(/:\d+@/, '@').trim();
+}
+
+// только числовая часть — работает и для @lid и для @s.whatsapp.net
+function numId(jid = '') {
+    return norm(jid).split('@')[0];
+}
+
+// сравниваем по числовой части чтобы не зависеть от домена
+function sameId(a, b) {
+    return numId(a) === numId(b);
 }
 
 function self(sock) {
@@ -20,7 +31,7 @@ function wait(ms) {
 }
 
 function tag(jid) {
-    return `@${norm(jid).split('@')[0]}`;
+    return `@${numId(jid)}`;
 }
 
 async function getMeta(sock, groupId) {
@@ -32,15 +43,12 @@ async function isAdmin(sock, groupId, jid) {
         const m = await getMeta(sock, groupId);
         return m.participants
             .filter(p => p.admin)
-            .map(p => norm(p.id))
-            .includes(norm(jid));
+            .some(p => sameId(p.id, jid));
     } catch {
         return false;
     }
 }
 
-// отправляем invite message партнёру в ЛС
-// партнёр получает его и сам вызывает groupAcceptInviteV4
 async function sendInviteToPartner(sock, groupId, partnerJid) {
     try {
         const inviteCode = await sock.groupInviteCode(groupId);
@@ -69,48 +77,46 @@ async function sendInviteToPartner(sock, groupId, partnerJid) {
         );
 
         await sock.relayMessage(partnerJid, invite.message, { messageId: invite.key.id });
-        console.log(`[protect] invite отправлен партнёру: ${partnerJid}`);
+        console.log(`[protect] invite отправлен: ${partnerJid}`);
         return true;
     } catch (e) {
-        console.error(`[protect] sendInviteToPartner упал:`, e.message);
+        console.error(`[protect] sendInviteToPartner:`, e.message);
         return false;
     }
 }
 
-// партнёр получил invite message → принимаем автоматически
-// вызывается из main.js при входящем groupInviteMessage
+// кикнутый бот получает invite от партнёра → сам заходит
 async function handleInviteMessage(sock, message) {
     try {
-        const partner = norm(settings.partnerJid || '');
-        const sender  = norm(message.key.participant || message.key.remoteJid || '');
+        const partner  = norm(settings.partnerJid || '');
+        const senderRaw = message.key.participant || message.key.remoteJid || '';
 
-        // принимаем только от нашего партнёра
-        if (sender !== partner) return;
+        // принимаем только от нашего партнёра (сравниваем по числу)
+        if (!sameId(senderRaw, partner)) return;
 
         const inviteMsg = message.message?.groupInviteMessage;
         if (!inviteMsg) return;
 
-        // только для нашей защищённой группы
         if (inviteMsg.groupJid !== PROTECTED_GROUP) return;
+        if (inviteMsg.caption !== '⚙️ auto-rejoin') return;
 
         console.log(`[protect] авто-принятие invite от партнёра`);
         await sock.groupAcceptInviteV4(message.key.remoteJid, inviteMsg);
-        console.log(`[protect] успешно зашёл в группу через inviteV4`);
+        console.log(`[protect] успешно зашёл в группу`);
     } catch (e) {
         console.error(`[protect][handleInviteMessage]`, e.message);
     }
 }
 
 async function waitForRejoin(sock, groupId, partnerJid, waitMs = 20000) {
-    const step   = 1500;
-    const ticks  = Math.floor(waitMs / step);
-    const target = norm(partnerJid);
+    const step  = 1500;
+    const ticks = Math.floor(waitMs / step);
 
     for (let i = 0; i < ticks; i++) {
         await wait(step);
         try {
             const m = await getMeta(sock, groupId);
-            if (m.participants.find(p => norm(p.id) === target)) return true;
+            if (m.participants.some(p => sameId(p.id, partnerJid))) return true;
         } catch {}
     }
     return false;
@@ -124,18 +130,19 @@ async function handle(sock, groupId, participants, author) {
     const me      = self(sock);
     const partner = norm(settings.partnerJid || '');
     const role    = settings.botRole || 'biba';
-    const authorN = norm(author);
 
     const kickedList = participants
         .map(p => norm(typeof p === 'string' ? p : (p?.id || '')))
         .filter(Boolean);
 
-    // меня кикнули — я не могу ничего сделать, партнёр разберётся
-    if (kickedList.includes(me)) return;
+    // меня кикнули — сравниваем по числу, не по домену
+    const iMeKicked = kickedList.some(k => sameId(k, me));
+    if (iMeKicked) return;
 
-    // партнёра кикнули — действую я
-    if (kickedList.includes(partner)) {
-        if (authorN === me) return;
+    // партнёра кикнули
+    const isPartnerKicked = kickedList.some(k => sameId(k, partner));
+    if (isPartnerKicked) {
+        if (sameId(author, me)) return;
 
         let owner = '';
         try {
@@ -146,24 +153,23 @@ async function handle(sock, groupId, participants, author) {
             return;
         }
 
-        if (authorN === owner) return;
+        if (sameId(author, owner)) return;
 
         await wait(role === 'biba' ? DELAY_BIBA : DELAY_BOBA);
 
-        // снимаем рейдера
         try {
             if (await isAdmin(sock, groupId, author)) {
                 await sock.groupParticipantsUpdate(groupId, [author], 'demote');
-                console.log(`[protect][${role}] рейдер снят: ${authorN}`);
+                console.log(`[protect][${role}] рейдер снят: ${numId(author)}`);
             }
         } catch (e) {
             console.error(`[protect] demote рейдера:`, e.message);
         }
 
-        // отправляем invite партнёру — он сам зайдёт через groupAcceptInviteV4
         const sent = await sendInviteToPartner(sock, groupId, partner);
 
         if (sent) {
+
 
             const rejoined = await waitForRejoin(sock, groupId, partner);
             if (rejoined) {
@@ -174,31 +180,28 @@ async function handle(sock, groupId, participants, author) {
                 } catch (e) {
                     console.error(`[protect] promote партнёра:`, e.message);
                 }
-            } else {
-                console.log(`[protect][${role}] партнёр не вернулся за 20 сек`);
-
             }
-        }
+        } else 
         return;
     }
 
-    // обычный кик не владельцем — снимаем рейдера
-    if (authorN === me)      return;
-    if (authorN === partner) return;
+    // обычный кик не владельцем
+    if (sameId(author, me))      return;
+    if (sameId(author, partner)) return;
 
     try {
         const m     = await getMeta(sock, groupId);
         const owner = norm(m.owner || '');
-        if (authorN === owner) return;
+        if (sameId(author, owner)) return;
 
-        const raider = m.participants.find(p => norm(p.id) === authorN);
+        const raider = m.participants.find(p => sameId(p.id, author));
         if (!raider?.admin) return;
 
         await wait(role === 'biba' ? DELAY_BIBA : DELAY_BOBA);
 
         if (await isAdmin(sock, groupId, author)) {
             await sock.groupParticipantsUpdate(groupId, [author], 'demote');
-            console.log(`[protect][${role}] кик-рейдер снят: ${authorN}`);
+            console.log(`[protect][${role}] кик-рейдер снят: ${numId(author)}`);
         }
     } catch (e) {
         console.error(`[protect][handle]`, e.message);
@@ -213,17 +216,16 @@ async function handleDemote(sock, groupId, participants, author) {
     const me      = self(sock);
     const partner = norm(settings.partnerJid || '');
     const role    = settings.botRole || 'biba';
-    const authorN = norm(author);
 
-    if (authorN === me)      return;
-    if (authorN === partner) return;
+    if (sameId(author, me))      return;
+    if (sameId(author, partner)) return;
 
     try {
         const m     = await getMeta(sock, groupId);
         const owner = norm(m.owner || '');
-        if (authorN === owner) return;
+        if (sameId(author, owner)) return;
 
-        const raider = m.participants.find(p => norm(p.id) === authorN);
+        const raider = m.participants.find(p => sameId(p.id, author));
         if (!raider?.admin) return;
 
         const victims = participants
@@ -245,13 +247,13 @@ async function handleDemote(sock, groupId, participants, author) {
 
         if (await isAdmin(sock, groupId, author)) {
             await sock.groupParticipantsUpdate(groupId, [author], 'demote');
-            console.log(`[protect][${role}] demote-рейдер снят: ${authorN}`);
+            console.log(`[protect][${role}] demote-рейдер снят: ${numId(author)}`);
         }
 
         for (const v of toRestore) {
             if (!(await isAdmin(sock, groupId, v))) {
                 await sock.groupParticipantsUpdate(groupId, [v], 'promote');
-                console.log(`[protect][${role}] восстановлен: ${v}`);
+                console.log(`[protect][${role}] восстановлен: ${numId(v)}`);
             }
         }
 
@@ -268,17 +270,16 @@ async function handlePromote(sock, groupId, participants, author) {
     const me      = self(sock);
     const partner = norm(settings.partnerJid || '');
     const role    = settings.botRole || 'biba';
-    const authorN = norm(author);
 
-    if (authorN === me)      return;
-    if (authorN === partner) return;
+    if (sameId(author, me))      return;
+    if (sameId(author, partner)) return;
 
     try {
         const m     = await getMeta(sock, groupId);
         const owner = norm(m.owner || '');
-        if (authorN === owner) return;
+        if (sameId(author, owner)) return;
 
-        const raider = m.participants.find(p => norm(p.id) === authorN);
+        const raider = m.participants.find(p => sameId(p.id, author));
         if (!raider?.admin) return;
 
         const promoted = participants
@@ -300,13 +301,13 @@ async function handlePromote(sock, groupId, participants, author) {
 
         if (await isAdmin(sock, groupId, author)) {
             await sock.groupParticipantsUpdate(groupId, [author], 'demote');
-            console.log(`[protect][${role}] promote-рейдер снят: ${authorN}`);
+            console.log(`[protect][${role}] promote-рейдер снят: ${numId(author)}`);
         }
 
         for (const v of toStrip) {
             if (await isAdmin(sock, groupId, v)) {
                 await sock.groupParticipantsUpdate(groupId, [v], 'demote');
-                console.log(`[protect][${role}] незаконная админка снята: ${v}`);
+                console.log(`[protect][${role}] незаконная админка снята: ${numId(v)}`);
             }
         }
 

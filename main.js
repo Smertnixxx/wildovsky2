@@ -214,6 +214,11 @@ async function handleMessages(sock, messageUpdate, printLog) {
 
         const message = messages[0];
         if (!message?.message) return;
+        if (message.message?.groupInviteMessage) {
+    const gp = getCommand('groupprotect');
+    if (gp?.handleInviteMessage) await gp.handleInviteMessage(sock, message);
+    return;
+}
         const chatId = message.key.remoteJid;
         const senderId = message.key.participant || message.key.remoteJid;
         const isGroup = chatId.endsWith('@g.us');
