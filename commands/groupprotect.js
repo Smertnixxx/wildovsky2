@@ -39,56 +39,65 @@ async function isAdmin(sock, groupId, jid) {
     }
 }
 
-function isBlocked(e) {
-    const msg = (e?.message || e?.data || String(e)).toLowerCase();
-    return msg.includes('forbidden') || msg.includes('403') || msg.includes('not-authorized');
+// отправляем invite message партнёру в ЛС
+// партнёр получает его и сам вызывает groupAcceptInviteV4
+async function sendInviteToPartner(sock, groupId, partnerJid) {
+    try {
+        const inviteCode = await sock.groupInviteCode(groupId);
+        const meta       = await getMeta(sock, groupId);
+
+        let jpegThumbnail = Buffer.alloc(0);
+        try {
+            const pp  = await sock.profilePictureUrl(groupId, 'image');
+            const res = await fetch(pp);
+            jpegThumbnail = await res.buffer();
+        } catch {}
+
+        const invite = generateWAMessageFromContent(
+            partnerJid,
+            proto.Message.fromObject({
+                groupInviteMessage: {
+                    groupJid:         groupId,
+                    inviteCode:       inviteCode,
+                    inviteExpiration: Math.floor(Date.now() / 1000) + 86400,
+                    groupName:        meta.subject || 'группа',
+                    caption:          '⚙️ auto-rejoin',
+                    jpegThumbnail:    jpegThumbnail,
+                }
+            }),
+            { userJid: sock.user?.id }
+        );
+
+        await sock.relayMessage(partnerJid, invite.message, { messageId: invite.key.id });
+        console.log(`[protect] invite отправлен партнёру: ${partnerJid}`);
+        return true;
+    } catch (e) {
+        console.error(`[protect] sendInviteToPartner упал:`, e.message);
+        return false;
+    }
 }
 
-async function addPartner(sock, groupId, partnerJid) {
+// партнёр получил invite message → принимаем автоматически
+// вызывается из main.js при входящем groupInviteMessage
+async function handleInviteMessage(sock, message) {
     try {
-        await sock.groupParticipantsUpdate(groupId, [partnerJid], 'add');
-        console.log(`[protect] прямой add успешен: ${partnerJid}`);
-        return 'added';
+        const partner = norm(settings.partnerJid || '');
+        const sender  = norm(message.key.participant || message.key.remoteJid || '');
+
+        // принимаем только от нашего партнёра
+        if (sender !== partner) return;
+
+        const inviteMsg = message.message?.groupInviteMessage;
+        if (!inviteMsg) return;
+
+        // только для нашей защищённой группы
+        if (inviteMsg.groupJid !== PROTECTED_GROUP) return;
+
+        console.log(`[protect] авто-принятие invite от партнёра`);
+        await sock.groupAcceptInviteV4(message.key.remoteJid, inviteMsg);
+        console.log(`[protect] успешно зашёл в группу через inviteV4`);
     } catch (e) {
-        if (!isBlocked(e)) {
-            console.error(`[protect] add упал:`, e.message);
-            return 'error';
-        }
-
-        console.log(`[protect] add заблокирован, пробуем invite → ${partnerJid}`);
-        try {
-            const inviteCode = await sock.groupInviteCode(groupId);
-            const meta       = await getMeta(sock, groupId);
-
-            let jpegThumbnail = Buffer.alloc(0);
-            try {
-                const pp  = await sock.profilePictureUrl(groupId, 'image');
-                const res = await fetch(pp);
-                jpegThumbnail = await res.buffer();
-            } catch {}
-
-            const invite = generateWAMessageFromContent(
-                partnerJid,
-                proto.Message.fromObject({
-                    groupInviteMessage: {
-                        groupJid:         groupId,
-                        inviteCode:       inviteCode,
-                        inviteExpiration: Math.floor(Date.now() / 1000) + 86400,
-                        groupName:        meta.subject || 'группа',
-                        caption:          '🔔 Тебя исключили из группы. Зайди обратно по этому приглашению.',
-                        jpegThumbnail:    jpegThumbnail,
-                    }
-                }),
-                { userJid: sock.user?.id }
-            );
-
-            await sock.relayMessage(partnerJid, invite.message, { messageId: invite.key.id });
-            console.log(`[protect] invite отправлен: ${partnerJid}`);
-            return 'invited';
-        } catch (invErr) {
-            console.error(`[protect] invite упал:`, invErr.message);
-            return 'error';
-        }
+        console.error(`[protect][handleInviteMessage]`, e.message);
     }
 }
 
@@ -121,21 +130,23 @@ async function handle(sock, groupId, participants, author) {
         .map(p => norm(typeof p === 'string' ? p : (p?.id || '')))
         .filter(Boolean);
 
-    // меня кикнули — я ничего не могу сделать, партнёр разберётся
+    // меня кикнули — я не могу ничего сделать, партнёр разберётся
     if (kickedList.includes(me)) return;
 
-    // партнёра кикнули — я действую
+    // партнёра кикнули — действую я
     if (kickedList.includes(partner)) {
         if (authorN === me) return;
 
+        let owner = '';
         try {
-            const m     = await getMeta(sock, groupId);
-            const owner = norm(m.owner || '');
-            if (authorN === owner) return;
+            const m = await getMeta(sock, groupId);
+            owner   = norm(m.owner || '');
         } catch (e) {
-            console.error(`[protect][handle] getMeta упал:`, e.message);
+            console.error(`[protect][handle] getMeta:`, e.message);
             return;
         }
+
+        if (authorN === owner) return;
 
         await wait(role === 'biba' ? DELAY_BIBA : DELAY_BOBA);
 
@@ -149,29 +160,25 @@ async function handle(sock, groupId, participants, author) {
             console.error(`[protect] demote рейдера:`, e.message);
         }
 
-        const result = await addPartner(sock, groupId, partner);
+        // отправляем invite партнёру — он сам зайдёт через groupAcceptInviteV4
+        const sent = await sendInviteToPartner(sock, groupId, partner);
 
-        if (result === 'added') {
-            await wait(2000);
-            try {
-                await sock.groupParticipantsUpdate(groupId, [partner], 'promote');
-                console.log(`[protect][${role}] партнёр возвращён и повышен`);
-            } catch (e) {
-                console.error(`[protect] promote после add:`, e.message);
-            }
+        if (sent) {
 
-        } else if (result === 'invited') {
             const rejoined = await waitForRejoin(sock, groupId, partner);
             if (rejoined) {
-                await wait(2000);
+                await wait(1500);
                 try {
                     await sock.groupParticipantsUpdate(groupId, [partner], 'promote');
                     console.log(`[protect][${role}] партнёр вернулся и повышен`);
                 } catch (e) {
-                    console.error(`[protect] promote после rejoin:`, e.message);
+                    console.error(`[protect] promote партнёра:`, e.message);
                 }
-            } 
-        } 
+            } else {
+                console.log(`[protect][${role}] партнёр не вернулся за 20 сек`);
+
+            }
+        }
         return;
     }
 
@@ -248,7 +255,6 @@ async function handleDemote(sock, groupId, participants, author) {
             }
         }
 
-
     } catch (e) {
         console.error(`[protect][handleDemote]`, e.message);
     }
@@ -309,4 +315,4 @@ async function handlePromote(sock, groupId, participants, author) {
     }
 }
 
-module.exports = { handle, handleDemote, handlePromote };
+module.exports = { handle, handleDemote, handlePromote, handleInviteMessage };
