@@ -1,7 +1,7 @@
 // commands/groupprotect.js
 const settings = require('../settings');
 
-const PROTECTED_GROUP = '120363420486491862@g.us';
+const PROTECTED_GROUP = '120363424761879922@g.us';
 const DELAY_BIBA = 300;
 const DELAY_BOBA = 2500;
 
