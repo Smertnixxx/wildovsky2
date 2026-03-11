@@ -375,7 +375,8 @@ if (message.message?.reactionMessage) {
             }
             return;
         }
-
+const { handle: handleSearchForward } = require('./lib/searchForward');
+await handleSearchForward(sock, message, isGroup);
 // Handle game moves AND surrender
 if (/^[1-9]$/.test(userMessage) || /^(сдаться|сдаюсь|surrender|give\s*up)$/i.test(userMessage)) {
     const tttCmd = getCommand('tictactoe');
