@@ -523,7 +523,7 @@ if (userMessage.startsWith('бот кто')) {
 if (userMessage === '+чат') {
     if (isGroup) {
         const muteCmd = getCommand('mute');
-        if (muteCmd?.muteCommand) await muteCmd.muteCommand(sock, chatId, senderId, message);
+        if (muteCmd?.unmuteCommand) await muteCmd.unmuteCommand(sock, chatId, senderId, message);
     }
     return;
 }
@@ -531,7 +531,7 @@ if (userMessage === '+чат') {
 if (userMessage === '-чат') {
     if (isGroup) {
         const muteCmd = getCommand('mute');
-        if (muteCmd?.unmuteCommand) await muteCmd.unmuteCommand(sock, chatId, senderId, message);
+        if (muteCmd?.muteCommand) await muteCmd.muteCommand(sock, chatId, senderId, message);
     }
     return;
 }
@@ -634,6 +634,11 @@ if (message.key.fromMe && ['.setxp','.addxp','.delxp','.setlvl','.setmsgs','.add
             case userMessage === '.клан' || userMessage.startsWith('.клан '): {
     const clanCmd = getCommand('clancommands');
     if (clanCmd?.handle) await clanCmd.handle(sock, chatId, senderId, rawText, message);
+    break;
+}case userMessage.startsWith('.convert'):
+case userMessage.startsWith('.конвертировать'): {
+    const convertCommand = getCommand('convert');
+    if (convertCommand) await convertCommand(sock, chatId, message);
     break;
 }
 

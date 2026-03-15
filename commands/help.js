@@ -39,7 +39,8 @@ async function helpCommand(sock, chatId, message) {
                 { title: ".котик", description: "Отправляет случайную картинку котика", id: "cmd_ping" },
                 { title: ".шрифт1 (ваш текст)", description: "Конвертирует ваш текст в уникальный шрифт", id: "cmd_ping" },
                 { title: ".шрифт2 (ваш текст)", description: "Конвертирует ваш текст в уникальный шрифт", id: "cmd_ping" },
-                { title: ".ttt", description: "Крестики-нолики", id: "cmd_ttt" }
+                { title: ".ttt", description: "Крестики-нолики", id: "cmd_ttt" },
+                { title: ".convert", description: "Преобразовывает из стикера в картинку/видео", id: "cmd_ttt" }
             ]
         },
         {
