@@ -375,6 +375,15 @@ if (message.message?.reactionMessage) {
             }
             return;
         }
+        const banchatCmd = getCommand('banchat');
+if (banchatCmd?.isChatBanned(chatId)) {
+    // Владелец всегда может разблокировать
+    if (message.key.fromMe && userMessage === '.разбанчат') {
+        await banchatCmd.handle(sock, chatId, senderId, message);
+    }
+    // Всем остальным (и всем другим командам владельца) — тишина
+    return;
+}
 const { handle: handleSearchForward } = require('./lib/searchForward');
 await handleSearchForward(sock, message, isGroup);
 // Handle game moves AND surrender
@@ -622,7 +631,16 @@ if (message.key.fromMe && ['.setxp','.addxp','.delxp','.setlvl','.setmsgs','.add
     if (clanAdminCmd?.handle) await clanAdminCmd.handle(sock, chatId, senderId, rawText, message);
     return;
 }
+
         switch (true) {
+            case userMessage === '.банчат':
+case userMessage === '.разбанчат': {
+    const banchatCommand = getCommand('banchat');
+    if (banchatCommand?.handle) {
+        await banchatCommand.handle(sock, chatId, senderId, message);
+    }
+    break;
+}
             case userMessage.startsWith('.kick'):
             case userMessage.startsWith('.кик'): {
                 const mentionedJidListKick = message.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
